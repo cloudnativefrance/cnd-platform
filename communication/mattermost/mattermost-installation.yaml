@@ -2,11 +2,12 @@ apiVersion: installation.mattermost.com/v1beta1
 kind: Mattermost
 metadata:
   name: cnd-france
+  namespace: cnd-communication
 spec:
-  size: 3000
+  size: "3000"
   ingress:
     enabled: true
     host: mattermost.cloudnativedays.fr
     annotations:
       kubernetes.io/ingress.class: nginx
-version: 10.8.1
+  version: 10.8.1
