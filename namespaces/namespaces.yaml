@@ -1,0 +1,20 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnd-callforpapers
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnd-communication
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnd-project
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnd-ticketing
