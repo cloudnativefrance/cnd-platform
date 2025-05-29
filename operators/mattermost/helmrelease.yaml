@@ -2,7 +2,7 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: mattermost-operator
-  namespace: cnd-communication
+  namespace: cnd-operators
 spec:
   releaseName: mattermost-operator
   driftDetection:
@@ -13,7 +13,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: mattermost
-        namespace: cnd-communication
+        namespace: cnd-operators
       version: "1.0.3"
   interval: 10m0s
   timeout: 30m

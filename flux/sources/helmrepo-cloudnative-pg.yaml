@@ -1,8 +1,8 @@
 apiVersion: source.toolkit.fluxcd.io/v1
 kind: HelmRepository
 metadata:
-  name: mattermost
+  name: cloudnative-pg
   namespace: cnd-operators
 spec:
   interval: 5m
-  url: https://helm.mattermost.com
+  url: https://cloudnative-pg.github.io/charts
