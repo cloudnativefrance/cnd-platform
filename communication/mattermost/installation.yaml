@@ -17,9 +17,9 @@ spec:
       secret: mattermost-cnpg-secret
   fileStore:
     external:
-      url: https://storage.googleapis.com
-      bucket: cnd-france-mattermost
-      secret: mattermost-gcs-secret
+      url: storage.googleapis.com
+      bucket: cloudnativedaysfr
+      secret: cnd-france-gcs-secret
   scheduling:
     resources:
       requests:
