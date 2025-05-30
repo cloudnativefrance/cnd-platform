@@ -1,0 +1,138 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: openproject
+  namespace: cnd-project
+spec:
+  releaseName: openproject
+  driftDetection:
+    mode: enabled
+  chart:
+    spec:
+      chart: openproject
+      sourceRef:
+        kind: HelmRepository
+        name: openproject
+      version: "10.0.2"
+  interval: 10m0s
+  timeout: 30m
+  install:
+    remediation:
+      retries: 3
+  values:
+    environment: {}
+
+    ingress:
+      enabled: true
+      ingressClassName: nginx
+      annotations: {}
+      host: "op.cloudnativedays.fr"
+      tls:
+        enabled: true
+        secretName: "" # Todo: When the ingress will be usable, configure it with letsencrypt
+
+    ## Ref: https://www.openproject.org/docs/installation-and-operations/configuration/incoming-emails/
+    cron:
+      enabled: false
+      ## See documentation referenced above for all variables.
+      environment:
+        IMAP_HOST:
+        IMAP_USERNAME:
+        IMAP_PASSWORD:
+        IMAP_PORT: 993
+
+      ## To avoid having sensitive credentials in your values.yaml, the preferred way is to
+      ## use an existing secret containing the IMAP credentials.
+      ## Specify the name of this existing secret here.
+      existingSecret:
+      ## In case your secret does not use the default keys in the secret, you can adjust them here.
+      secretKeys:
+        imapUsername: imapUsername
+        imapPassword: imapPassword
+
+    ## Ref.: https://www.openproject.org/docs/installation-and-operations/configuration/environment/#supported-environment-variables
+    openproject:
+      host: op.cloudnativedays.fr
+
+      extraEnvVarsSecret: ""
+
+      seed_locale: "fr"
+
+      railsRelativeUrlRoot:
+
+      ## Define admin user details
+      # only applicable on first installation
+      # c.f. https://www.openproject.org/docs/installation-and-operations/configuration/#initial-admin-user-creation
+      admin_user:
+        name: "OpenProject Admin"
+        mail: "admin@cloudnativefr.org"
+
+        secret: "openproject-admin-user"
+
+      ## Might be useful to set up OIDC with our Google Workspace
+      oidc:
+        enabled: false
+        provider: "Keycloak"
+        displayName: "Keycloak"
+        host: ""
+        identifier: ""
+        secret: ""
+        authorizationEndpoint: ""
+        tokenEndpoint: ""
+        userinfoEndpoint: ""
+        endSessionEndpoint: ""
+        scope: "[openid]"
+
+        # Optional attribute mappings from the id token
+        attribute_map: {}
+
+        ## To avoid having sensitive credentials in your values.yaml, the preferred way is to
+        ## use an existing secret containing the OIDC compatible access credentials.
+        ## Specify the name of this existing secret here.
+        existingSecret:
+
+        ## In case your secret does not use the default keys in the secret, you can adjust them here.
+        secretKeys:
+          identifier: "clientId"
+          secret: "clientSecret"
+
+        # Allows usage of sealed-secret for `identifier` and `secret` values.
+        # Special use case for use in setups where heml template `lookup` function is not available.
+        # Ref: https://github.com/argoproj/argo-cd/issues/5202
+        #
+        extraOidcSealedSecret:
+
+    persistence:
+      size: "25Gi"
+      storageClassName: "node-local-retain"
+
+    ## Ref.: https://www.openproject.org/docs/installation-and-operations/configuration/#attachments-storage
+    s3:
+      enabled: true
+      auth:
+        existingSecret: cnd-france-gcs-secret
+        secretKeys:
+          accessKeyId: "accesskey"
+          secretAccessKey: "secretkey"
+      bucketName: cloudnativedaysfr
+      endpoint: storage.googleapis.com
+      # Some providers do not properly support signature v4 streaming (e.g. Scaleway)
+      enableSignatureV4Streaming: true
+
+    postgresql:
+      bundled: false
+      connection:
+        host: cnpg-openproject-rw
+        port: 5432
+
+      auth:
+        existingSecret: "openproject-cnpg-secret"
+        secretKeys:
+          adminPasswordKey: "password"
+
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
