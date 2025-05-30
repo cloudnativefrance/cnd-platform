@@ -1,0 +1,35 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended"
+    ],
+    "dependencyDashboard": true,
+    "dependencyDashboardTitle": "Renovate Dashboard",
+    "labels": [
+        "renovatebot"
+    ],
+    "flux": {
+        "fileMatch": [
+            ".+\\.ya?ml"
+        ],
+        "ignorePaths": [
+            "clusters"
+        ]
+    },
+    "helm-values": {
+        "fileMatch": [
+            ".+\\.ya?ml"
+        ],
+        "ignorePaths": [
+            "clusters"
+        ]
+    },
+    "kubernetes": {
+        "fileMatch": [
+            ".+\\.ya?ml"
+        ],
+        "ignorePaths": [
+            "clusters"
+        ]
+    }
+}
