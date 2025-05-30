@@ -1,19 +1,19 @@
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
-  name: cnpg-mattermost
+  name: cnpg-openproject
 spec:
-  description: "Mattermost CNPG"
+  description: "OpenProject CNPG"
   instances: 1
   bootstrap:
     initdb:
-      database: mattermost
-      owner: mattermost
+      database: openproject
+      owner: openproject
       secret:
-        name: mattermost-cnpg-secret
+        name: openproject-cnpg-secret
 
   superuserSecret:
-    name: mattermost-cnpg-secret
+    name: openproject-cnpg-secret
 
   storage:
     storageClass: node-local-retain
@@ -21,7 +21,7 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: "gs://cloudnativedaysfr/cnpg/mattermost"
+      destinationPath: "gs://cloudnativedaysfr/cnpg/openproject"
       googleCredentials:
         applicationCredentials:
           name: cnd-france-gcs-secret

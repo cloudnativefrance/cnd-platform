@@ -2,7 +2,6 @@ apiVersion: installation.mattermost.com/v1beta1
 kind: Mattermost
 metadata:
   name: cnd-france
-  namespace: cnd-communication
 spec:
   version: 10.8.1
   size: "3000users"

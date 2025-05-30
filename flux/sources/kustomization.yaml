@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - helmrepo-cloudnative-pg.yaml
   - helmrepo-mattermost.yaml
+  - helmrepo-openproject.yaml
