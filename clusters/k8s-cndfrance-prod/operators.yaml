@@ -8,7 +8,7 @@ spec:
   interval: 2m0s
   path: ./operators
   dependsOn:
-    - name: cnd-operators
+    - name: cnd-flux-sources
   sourceRef:
     kind: GitRepository
     name: customer
