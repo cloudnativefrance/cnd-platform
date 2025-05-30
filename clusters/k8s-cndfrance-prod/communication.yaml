@@ -8,7 +8,7 @@ spec:
   interval: 2m0s
   path: ./communication
   dependsOn:
-    - name: cnd-flux-sources
+    - name: cnd-operators
   sourceRef:
     kind: GitRepository
     name: customer
