@@ -2,7 +2,6 @@ apiVersion: helm.toolkit.fluxcd.io/v2
 kind: HelmRelease
 metadata:
   name: openproject
-  namespace: cnd-project
 spec:
   releaseName: openproject
   driftDetection:
@@ -53,20 +52,11 @@ spec:
     ## Ref.: https://www.openproject.org/docs/installation-and-operations/configuration/environment/#supported-environment-variables
     openproject:
       host: op.cloudnativedays.fr
-
-      extraEnvVarsSecret: ""
-
       seed_locale: "fr"
 
-      railsRelativeUrlRoot:
-
-      ## Define admin user details
-      # only applicable on first installation
-      # c.f. https://www.openproject.org/docs/installation-and-operations/configuration/#initial-admin-user-creation
       admin_user:
         name: "OpenProject Admin"
         mail: "admin@cloudnativefr.org"
-
         secret: "openproject-admin-user"
 
       ## Might be useful to set up OIDC with our Google Workspace
