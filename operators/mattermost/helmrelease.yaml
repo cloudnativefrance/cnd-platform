@@ -16,7 +16,7 @@ spec:
         namespace: cnd-operators
       version: "1.0.3"
   interval: 10m0s
-  timeout: 30m
+  timeout: 3m
   install:
     remediation:
       retries: 3
