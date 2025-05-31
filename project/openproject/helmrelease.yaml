@@ -14,7 +14,7 @@ spec:
         name: openproject
       version: "10.0.2"
   interval: 10m0s
-  timeout: 30m
+  timeout: 8m
   install:
     remediation:
       retries: 3
@@ -118,6 +118,7 @@ spec:
       auth:
         existingSecret: "openproject-cnpg-secret"
         secretKeys:
+          userPasswordKey: "password"
           adminPasswordKey: "password"
 
     resources:
@@ -126,3 +127,7 @@ spec:
         cpu: "250m"
       limits:
         memory: "2Gi"
+
+    # Ref: https://github.com/opf/helm-charts/issues/187
+    containerSecurityContext:
+      readOnlyRootFilesystem: false
