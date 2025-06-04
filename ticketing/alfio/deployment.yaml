@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alfio
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: alfio
+  template:
+    metadata:
+      labels:
+        app: alfio
+    spec:
+      containers:
+        - env:
+            - name: POSTGRES_ENV_POSTGRES_DB
+              value: alfio
+            - name: POSTGRES_ENV_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: alfio-cnpg-secret
+                  key: password
+            - name: POSTGRES_ENV_POSTGRES_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: alfio-cnpg-secret
+                  key: username
+            - name: POSTGRES_PORT_5432_TCP_ADDR
+              value: alfio-rw
+            - name: POSTGRES_PORT_5432_TCP_PORT
+              value: "5432"
+            - name: SPRING_PROFILES_ACTIVE
+              value: jdbc-session
+            - name: JAVA_OPTS
+              value: "-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:+UseConcMarkSweepGC -Xmx256m -Xms256m"
+            - name: ALFIO_JAVA_OPTS
+              value: "-Dlogging.level.alfio=TRACE"
+          image: "alfio/alf.io:2.0-M5-2502"
+          imagePullPolicy: IfNotPresent
+          name: alfio
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 180
+          resources:
+            requests:
+              cpu: 500m
+              memory: 1Gi
+            limits:
+              memory: 1Gi
