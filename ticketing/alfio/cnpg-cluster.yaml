@@ -1,0 +1,43 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-alfio
+spec:
+  description: "PostgreSQL cluster for the application Alf.io"
+  instances: 1
+
+  bootstrap:
+    initdb:
+      database: alfio
+      owner: alfio
+      secret:
+        name: alfio-cnpg-secret
+
+  superuserSecret:
+    name: alfio-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "gs://cloudnativedaysfr/cnpg/alfio"
+      googleCredentials:
+        applicationCredentials:
+          name: cnd-france-gcs-secret
+          key: gcsCredentials
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "90d"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "1"
+    limits:
+      memory: "1Gi"

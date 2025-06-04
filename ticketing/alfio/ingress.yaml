@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations: {}
+  labels:
+    app: alfio
+  name: alfio
+spec:
+  rules:
+    - host: tickets.cloudnativedays.fr
+      http:
+        paths:
+          - backend:
+              service:
+                name: alfio
+                port:
+                  name: http
+            path: /*
+            pathType: ImplementationSpecific
