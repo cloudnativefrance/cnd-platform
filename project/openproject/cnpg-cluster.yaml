@@ -34,9 +34,23 @@ spec:
         encryption: AES256
     retentionPolicy: "90d"
 
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
   resources:
     requests:
-      memory: "512Mi"
-      cpu: "1"
+      memory: "768Mi"
+      cpu: 200m
     limits:
-      memory: "1Gi"
+      memory: "768Mi"
