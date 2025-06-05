@@ -10,6 +10,8 @@ spec:
     host: mm.cloudnativedays.fr
     ingressClass: public
     tlsSecret: "mattermost-tls"
+    annotations:
+      cert-manager.io/cluster-issuer: letsencrypt
   database:
     external:
       secret: mattermost-cnpg-secret

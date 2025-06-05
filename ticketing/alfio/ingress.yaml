@@ -4,6 +4,8 @@ metadata:
   labels:
     app: alfio
   name: alfio
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
 spec:
   ingressClassName: public
   rules:

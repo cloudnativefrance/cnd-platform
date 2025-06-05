@@ -24,7 +24,8 @@ spec:
     ingress:
       enabled: true
       ingressClassName: public
-      annotations: {}
+      annotations:
+        cert-manager.io/cluster-issuer: letsencrypt
       host: "op.cloudnativedays.fr"
       tls:
         enabled: true
