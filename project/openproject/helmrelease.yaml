@@ -23,7 +23,7 @@ spec:
 
     ingress:
       enabled: true
-      ingressClassName: nginx
+      ingressClassName: public
       annotations: {}
       host: "op.cloudnativedays.fr"
       tls:
