@@ -2,9 +2,8 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: pretalx
-  annotations:
-    kubernetes.io/ingress.class: nginx
 spec:
+  ingressClassName: public
   rules:
     - host: cfp.cloudnativedays.fr
       http:
@@ -16,3 +15,7 @@ spec:
                 name: pretalx
                 port:
                   number: 80
+  tls:
+    - hosts:
+        - cfp.cloudnativedays.fr
+      secretName: pretalx-tls

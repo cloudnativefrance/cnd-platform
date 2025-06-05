@@ -28,12 +28,14 @@ spec:
 
     primary:
       resourcesPreset: "nano"
+      storageClass: "node-local-retain"
       persistence:
         size: 2Gi
 
     replica:
       replicaCount: 1
       resourcesPreset: "nano"
+      storageClass: "node-local-retain"
       persistence:
         size: 1Gi
 

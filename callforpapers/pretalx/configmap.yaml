@@ -22,7 +22,7 @@ data:
     port = 5432
 
     [redis]
-    location = redis://pretalx-valkey-master:6379
+    location = redis://pretalx-valkey-primary:6379
     session = true
 
     [locale]

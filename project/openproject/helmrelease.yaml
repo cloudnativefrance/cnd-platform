@@ -23,7 +23,7 @@ spec:
 
     ingress:
       enabled: true
-      ingressClassName: nginx
+      ingressClassName: public
       annotations: {}
       host: "op.cloudnativedays.fr"
       tls:
@@ -92,8 +92,11 @@ spec:
         #
         extraOidcSealedSecret:
 
+      tmpVolumesStorageClassName: "node-local-retain"
+
     persistence:
       enabled: false
+      storageClassName: "node-local-retain"
 
     ## Ref.: https://www.openproject.org/docs/installation-and-operations/configuration/#attachments-storage
     s3:

@@ -1,11 +1,11 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  annotations: {}
   labels:
     app: alfio
   name: alfio
 spec:
+  ingressClassName: public
   rules:
     - host: tickets.cloudnativedays.fr
       http:
@@ -17,3 +17,7 @@ spec:
                   name: http
             path: /*
             pathType: ImplementationSpecific
+  tls:
+    - hosts:
+        - tickets.cloudnativedays.fr
+      secretName: alfio-tls

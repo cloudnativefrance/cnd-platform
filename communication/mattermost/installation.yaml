@@ -8,9 +8,8 @@ spec:
   ingress:
     enabled: true
     host: mm.cloudnativedays.fr
-    annotations:
-      kubernetes.io/ingress.class: nginx
-    tlsSecret: "cnd-france-tls"
+    ingressClass: public
+    tlsSecret: "mattermost-tls"
   database:
     external:
       secret: mattermost-cnpg-secret
