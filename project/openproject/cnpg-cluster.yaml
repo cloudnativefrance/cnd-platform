@@ -4,7 +4,7 @@ metadata:
   name: cnpg-openproject
 spec:
   description: "OpenProject CNPG"
-  instances: 1
+  instances: 2
   bootstrap:
     initdb:
       database: openproject
