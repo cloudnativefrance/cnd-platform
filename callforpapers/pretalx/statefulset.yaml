@@ -71,6 +71,7 @@ spec:
         name: pretalx-data
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: "node-local-retain"
         resources:
           requests:
             storage: 5Gi
@@ -78,6 +79,7 @@ spec:
         name: pretalx-public
       spec:
         accessModes: ["ReadWriteOnce"]
+        storageClassName: "node-local-retain"
         resources:
           requests:
             storage: 2Gi
