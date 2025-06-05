@@ -23,6 +23,8 @@ spec:
               value: /public/media
             - name: PRETALX_FILESYSTEM_STATIC
               value: /public/static
+            - name: GUNICORN_BIND_ADDR
+              value: 0.0.0.0:8080
             - name: PRETALX_DB_USER
               valueFrom:
                 secretKeyRef:
@@ -36,14 +38,14 @@ spec:
           livenessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /
-              port: 80
+              port: 8080
             initialDelaySeconds: 10
             periodSeconds: 5
             failureThreshold: 3
