@@ -2,7 +2,6 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: pretalx-config
-  namespace: cnd-callforpapers
 data:
   pretalx.cfg: |
     # This is an example pretalx configuration file.
