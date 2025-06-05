@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pretalx
+  namespace: cnd-callforpapers
+spec:
+  serviceName: pretalx
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pretalx
+  template:
+    metadata:
+      labels:
+        app: pretalx
+    spec:
+      containers:
+        - name: pretalx
+          image: pretalx/standalone:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: PRETALX_FILESYSTEM_MEDIA
+              value: /public/media
+            - name: PRETALX_FILESYSTEM_STATIC
+              value: /public/static
+            - name: PRETALX_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: username
+            - name: PRETALX_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: password
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: pretalx-data
+              mountPath: /data
+            - name: pretalx-public
+              mountPath: /public
+            - name: pretalx-config
+              mountPath: /etc/pretalx/pretalx.cfg
+              subPath: pretalx.cfg
+      volumes:
+        - name: pretalx-config
+          configMap:
+            name: pretalx-config
+      resources:
+        requests:
+          memory: 1Gi
+          cpu: 300m
+        limits:
+          memory: 1Gi
+  volumeClaimTemplates:
+    - metadata:
+        name: pretalx-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: pretalx-public
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

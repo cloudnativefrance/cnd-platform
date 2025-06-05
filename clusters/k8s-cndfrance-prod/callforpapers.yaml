@@ -1,0 +1,14 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: cnd-callforpapers
+  namespace: flux-system
+spec:
+  prune: true
+  interval: 2m0s
+  path: ./callforpapers
+  dependsOn:
+    - name: cnd-operators
+  sourceRef:
+    kind: GitRepository
+    name: customer

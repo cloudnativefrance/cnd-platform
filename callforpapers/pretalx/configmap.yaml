@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pretalx-config
+  namespace: cnd-callforpapers
+data:
+  pretalx.cfg: |
+    # This is an example pretalx configuration file.
+    # Documentation: https://docs.pretalx.org/administrator/configure.html
+
+    [filesystem]
+    data = /data
+    static = /public/static
+
+    [site]
+    debug = False
+    url = https://cfp.cloudnativedays.fr
+
+    [database]
+    backend = postgresql
+    name = pretalx
+    host = cnpg-pretalx-rw
+    port = 5432
+
+    [redis]
+    location = redis://pretalx-valkey-master:6379
+    session = true
+
+    [locale]
+    language_code = fr
+    time_zone = Europe/Paris
+
+    [mail]
+    # I need to find a way to send emails, probably with a SMTP server
+    from = admin@cloudnativefr.org
+    host = localhost
+    port = 25
+    user = admin
+    password = Change this in production or you're going to have a bad time
+    tls = False
+    ssl = True
