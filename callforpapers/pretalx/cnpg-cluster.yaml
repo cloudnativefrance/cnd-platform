@@ -1,0 +1,43 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-pretalx
+spec:
+  description: "PostgreSQL cluster for the application Pretalx"
+  instances: 1
+
+  bootstrap:
+    initdb:
+      database: pretalx
+      owner: pretalx
+      secret:
+        name: pretalx-cnpg-secret
+
+  superuserSecret:
+    name: pretalx-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "gs://cloudnativedaysfr/cnpg/pretalx"
+      googleCredentials:
+        applicationCredentials:
+          name: cnd-france-gcs-secret
+          key: gcsCredentials
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "90d"
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "1"
+    limits:
+      memory: "1Gi"
