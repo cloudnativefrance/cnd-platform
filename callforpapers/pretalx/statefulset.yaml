@@ -55,16 +55,17 @@ spec:
             - name: pretalx-config
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 300m
+            limits:
+              memory: 1Gi
       volumes:
         - name: pretalx-config
           configMap:
             name: pretalx-config
-      resources:
-        requests:
-          memory: 1Gi
-          cpu: 300m
-        limits:
-          memory: 1Gi
+
   volumeClaimTemplates:
     - metadata:
         name: pretalx-data
