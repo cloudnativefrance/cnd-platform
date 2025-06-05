@@ -4,7 +4,7 @@ metadata:
   name: cnpg-mattermost
 spec:
   description: "Mattermost CNPG"
-  instances: 1
+  instances: 2
   bootstrap:
     initdb:
       database: mattermost

@@ -4,7 +4,7 @@ metadata:
   name: cnpg-pretalx
 spec:
   description: "PostgreSQL cluster for the application Pretalx"
-  instances: 1
+  instances: 2
 
   bootstrap:
     initdb:

@@ -4,7 +4,7 @@ metadata:
   name: cnpg-alfio
 spec:
   description: "PostgreSQL cluster for the application Alf.io"
-  instances: 1
+  instances: 2
 
   bootstrap:
     initdb:
