@@ -29,7 +29,7 @@ spec:
       host: "op.cloudnativedays.fr"
       tls:
         enabled: true
-        secretName: "" # Todo: When the ingress will be usable, configure it with letsencrypt
+        secretName: "openproject-tls"
 
     ## Ref: https://www.openproject.org/docs/installation-and-operations/configuration/incoming-emails/
     cron:
