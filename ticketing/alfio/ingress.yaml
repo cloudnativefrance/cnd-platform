@@ -6,6 +6,7 @@ metadata:
   name: alfio
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
 spec:
   ingressClassName: public
   rules:
@@ -17,8 +18,8 @@ spec:
                 name: alfio
                 port:
                   name: http
-            path: /*
-            pathType: ImplementationSpecific
+            path: /
+            pathType: Prefix
   tls:
     - hosts:
         - tickets.cloudnativedays.fr
