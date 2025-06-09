@@ -12,3 +12,12 @@ spec:
   sourceRef:
     kind: GitRepository
     name: customer
+  healthChecks:
+    - apiVersion: installation.mattermost.com/v1beta1
+      kind: Mattermost
+      name: cnd-france
+      namespace: cnd-communication
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-openproject
+      namespace: cnd-communication
