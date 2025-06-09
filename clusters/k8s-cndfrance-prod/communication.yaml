@@ -19,5 +19,5 @@ spec:
       namespace: cnd-communication
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
-      name: cnpg-openproject
+      name: cnpg-mattermost
       namespace: cnd-communication
