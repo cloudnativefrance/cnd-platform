@@ -85,6 +85,49 @@ spec:
               cpu: 300m
             limits:
               memory: 1Gi
+        - name: pretalx-worker
+          image: pretalx/standalone:v2025.1.0
+          command:
+            ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
+          env:
+            - name: PRETALX_FILESYSTEM_MEDIA
+              value: /public/media
+            - name: PRETALX_FILESYSTEM_STATIC
+              value: /public/static
+            - name: PRETALX_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: username
+            - name: PRETALX_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: password
+            - name: PRETALX_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: redis-url
+            - name: PRETALX_MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: master-password
+          volumeMounts:
+            - name: pretalx-data
+              mountPath: /data
+            - name: pretalx-public
+              mountPath: /public
+            - name: pretalx-config
+              mountPath: /etc/pretalx/pretalx.cfg
+              subPath: pretalx.cfg
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 300m
+            limits:
+              memory: 1Gi
       volumes:
         - name: pretalx-config
           configMap:
