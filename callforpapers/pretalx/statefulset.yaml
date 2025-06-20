@@ -109,6 +109,21 @@ spec:
                 secretKeyRef:
                   name: pretalx-valkey
                   key: redis-url
+            - name: PRETALX_CELERY_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-backend-url
+            - name: PRETALX_CELERY_BROKER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-broker-url
+            - name: PRETALX_MAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: login
             - name: PRETALX_MAIL_PASSWORD
               valueFrom:
                 secretKeyRef:
