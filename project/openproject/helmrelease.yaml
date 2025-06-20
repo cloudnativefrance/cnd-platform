@@ -108,7 +108,8 @@ spec:
           accessKeyId: "accesskey"
           secretAccessKey: "secretkey"
       bucketName: cloudnativedaysfr
-      endpoint: storage.googleapis.com
+      region: "EU"
+      endpoint: https://storage.googleapis.com
       pathStyle: true
       # Some providers do not properly support signature v4 streaming (e.g. Scaleway)
       enableSignatureV4Streaming: true
