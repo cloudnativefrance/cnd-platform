@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: cnd-callforpapers
 
 resources:
+  - brevo-smtp-secret.yaml
   - cnd-france-gcs-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml

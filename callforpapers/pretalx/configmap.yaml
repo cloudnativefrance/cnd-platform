@@ -22,7 +22,7 @@ data:
     port = 5432
 
     [redis]
-    location = redis://pretalx-valkey-primary:6379
+    # location = "" # Defined through env vars
     session = true
 
     [locale]
@@ -30,11 +30,10 @@ data:
     time_zone = Europe/Paris
 
     [mail]
-    # I need to find a way to send emails, probably with a SMTP server
     from = admin@cloudnativefr.org
-    host = localhost
-    port = 25
-    user = admin
-    password = Change this in production or you're going to have a bad time
+    host = smtp-relay.brevo.com
+    port = 587
+    # user = "" # Defined through env vars
+    # password = "" # Defined through env vars
     tls = False
     ssl = True

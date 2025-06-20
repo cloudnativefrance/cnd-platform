@@ -15,9 +15,9 @@ spec:
     spec:
       containers:
         - name: pretalx
-          image: pretalx/standalone:latest
+          image: pretalx/standalone:v2025.1.0
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           env:
             - name: PRETALX_FILESYSTEM_MEDIA
               value: /public/media
@@ -35,20 +35,100 @@ spec:
                 secretKeyRef:
                   name: pretalx-cnpg-secret
                   key: password
+            - name: PRETALX_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: redis-url
+            - name: PRETALX_MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: master-password
           livenessProbe:
+            failureThreshold: 3
             httpGet:
+              httpHeaders:
+                - name: Host
+                  value: cfp.cloudnativedays.fr
               path: /
               port: 8080
-            initialDelaySeconds: 30
+              scheme: HTTP
+            initialDelaySeconds: 80
             periodSeconds: 10
-            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 1
           readinessProbe:
+            failureThreshold: 3
             httpGet:
+              httpHeaders:
+                - name: Host
+                  value: cfp.cloudnativedays.fr
               path: /
               port: 8080
-            initialDelaySeconds: 10
+              scheme: HTTP
+            initialDelaySeconds: 30
             periodSeconds: 5
-            failureThreshold: 3
+            successThreshold: 1
+            timeoutSeconds: 1
+          volumeMounts:
+            - name: pretalx-data
+              mountPath: /data
+            - name: pretalx-public
+              mountPath: /public
+            - name: pretalx-config
+              mountPath: /etc/pretalx/pretalx.cfg
+              subPath: pretalx.cfg
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 300m
+            limits:
+              memory: 1Gi
+        - name: pretalx-worker
+          image: pretalx/standalone:v2025.1.0
+          command:
+            ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
+          env:
+            - name: PRETALX_FILESYSTEM_MEDIA
+              value: /public/media
+            - name: PRETALX_FILESYSTEM_STATIC
+              value: /public/static
+            - name: PRETALX_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: username
+            - name: PRETALX_DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-cnpg-secret
+                  key: password
+            - name: PRETALX_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: redis-url
+            - name: PRETALX_CELERY_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-backend-url
+            - name: PRETALX_CELERY_BROKER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-broker-url
+            - name: PRETALX_MAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: login
+            - name: PRETALX_MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: master-password
           volumeMounts:
             - name: pretalx-data
               mountPath: /data
@@ -67,7 +147,10 @@ spec:
         - name: pretalx-config
           configMap:
             name: pretalx-config
-
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
   volumeClaimTemplates:
     - metadata:
         name: pretalx-data
