@@ -12,3 +12,4 @@ resources:
   - pretalx-cnpg-secret.yaml
   - service.yaml
   - statefulset.yaml
+  - valkey-secret.yaml
