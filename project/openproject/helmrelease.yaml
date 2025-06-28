@@ -103,16 +103,15 @@ spec:
     s3:
       enabled: true
       auth:
-        existingSecret: cnd-france-gcs-secret
+        existingSecret: cnd-france-scw-secret
         secretKeys:
           accessKeyId: "accesskey"
           secretAccessKey: "secretkey"
       bucketName: cloudnativedaysfr
-      region: "EU"
-      endpoint: https://storage.googleapis.com
+      region: "PAR"
+      endpoint: https://s3.fr-par.scw.cloud
       pathStyle: true
-      # Some providers do not properly support signature v4 streaming (e.g. Scaleway)
-      enableSignatureV4Streaming: true
+      enableSignatureV4Streaming: false
 
     postgresql:
       bundled: false

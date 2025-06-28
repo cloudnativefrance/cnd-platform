@@ -1,0 +1,40 @@
+apiVersion: v1
+data:
+  pretalx.cfg: |
+    # This is an example pretalx configuration file.
+    # Documentation: https://docs.pretalx.org/administrator/configure.html
+    # Sensitive are provisioned via env vars
+
+    [filesystem]
+    data = /data
+    static = /public/static
+
+    [site]
+    url = https://cfp.cloudnativedays.fr
+
+    [database]
+    backend = postgresql
+    name = pretalx
+    host = cnpg-pretalx-rw
+    port = 5432
+
+    [redis]
+    sessions = True
+
+    [locale]
+    language_code = fr
+    time_zone = Europe/Paris
+
+    [mail]
+    from = admin@cloudnativefr.org
+    host = smtp-relay.brevo.com
+    port = 587
+    tls = True
+    ssl = False
+
+    [logging]
+    email = admin@cloudnativefr.org
+kind: ConfigMap
+metadata:
+  name: pretalx-config
+  namespace: cnd-callforpapers

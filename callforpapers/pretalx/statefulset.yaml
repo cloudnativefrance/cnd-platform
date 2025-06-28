@@ -35,6 +35,31 @@ spec:
                 secretKeyRef:
                   name: pretalx-cnpg-secret
                   key: password
+            - name: PRETALX_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: redis-url
+            - name: PRETALX_CELERY_BROKER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-broker-url
+            - name: PRETALX_CELERY_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-backend-url
+            - name: PRETALX_MAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: login
+            - name: PRETALX_MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: master-password
           livenessProbe:
             failureThreshold: 3
             httpGet:
@@ -81,10 +106,10 @@ spec:
             ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
           resources:
             requests:
-              memory: 300Mi
+              memory: 350Mi
               cpu: 100m
             limits:
-              memory: 300Mi
+              memory: 350Mi
           env:
             - name: PRETALX_FILESYSTEM_MEDIA
               value: /public/media
