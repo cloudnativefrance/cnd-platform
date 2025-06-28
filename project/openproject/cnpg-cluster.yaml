@@ -21,11 +21,18 @@ spec:
 
   backup:
     barmanObjectStore:
-      destinationPath: "gs://cloudnativedaysfr/cnpg/openproject"
-      googleCredentials:
-        applicationCredentials:
-          name: cnd-france-gcs-secret
-          key: gcsCredentials
+      destinationPath: "s3://cloudnativedaysfr/cnpg/openproject"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: accesskey
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secretkey
+        region:
+          name: cnd-france-scw-secret
+          key: region
       wal:
         compression: gzip
         encryption: AES256

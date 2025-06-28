@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: cnd-project
 
 resources:
-  - cnd-france-gcs-secret.yaml
+  - cnd-france-scw-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
   - helmrelease.yaml
