@@ -135,8 +135,8 @@ spec:
               subPath: pretalx.cfg
       volumes:
         - name: pretalx-config
-          secret:
-            secretName: pretalx-config
+          configMap:
+            name: pretalx-config
       securityContext:
         fsGroup: 999
         runAsUser: 999
