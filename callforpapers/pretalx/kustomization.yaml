@@ -6,7 +6,8 @@ resources:
   - cnd-france-gcs-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
-  - config-secret.yaml
+  - brevo-smtp-secret.yaml
+  - configmap.yaml
   - helmrelease-valkey.yaml
   - ingress.yaml
   - pretalx-cnpg-secret.yaml
