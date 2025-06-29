@@ -3,11 +3,12 @@ kind: Kustomization
 namespace: cnd-callforpapers
 
 resources:
-  - cnd-france-gcs-secret.yaml
+  - cnd-france-scw-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
   - brevo-smtp-secret.yaml
   - configmap.yaml
+  - nginx-configmap.yaml
   - helmrelease-valkey.yaml
   - ingress.yaml
   - pretalx-cnpg-secret.yaml
