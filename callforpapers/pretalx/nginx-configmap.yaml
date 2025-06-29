@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pretalx-nginx
+  namespace: cnd-callforpapers
+data:
+  nginx.conf: |
+    # A non-root friendly NGINX configuration
+    pid /tmp/nginx.pid;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+
+      # Redirect all logs to stdout/stderr
+      access_log /dev/stdout;
+      error_log /dev/stderr;
+
+      proxy_temp_path       /var/cache/nginx/proxy_temp;
+      client_body_temp_path /var/cache/nginx/client_body_temp;
+      fastcgi_temp_path     /var/cache/nginx/fastcgi_temp;
+      uwsgi_temp_path       /var/cache/nginx/uwsgi_temp;
+      scgi_temp_path        /var/cache/nginx/scgi_temp;
+
+      # The server block is the same as before.
+      server {
+          listen 8081;
+          root /public;
+
+          location /static/ {
+            try_files $uri $uri/ =404;
+            autoindex off;
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            limit_except GET HEAD { deny all; }
+          }
+          location /media/ {
+            try_files $uri $uri/ =404;
+            autoindex off;
+            expires 30d;
+            add_header Cache-Control "public, immutable";
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header X-XSS-Protection "1; mode=block" always;
+            limit_except GET HEAD { deny all; }
+          }
+          location = /healthz {
+              access_log off;
+              return 200 'ok';
+              add_header Content-Type text/plain;
+          }
+      }
+    }

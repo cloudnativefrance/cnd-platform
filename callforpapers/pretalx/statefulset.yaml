@@ -96,20 +96,20 @@ spec:
               subPath: pretalx.cfg
           resources:
             requests:
-              memory: 1.6Gi
+              memory: 2Gi
               cpu: 300m
             limits:
-              memory: 1.6Gi
+              memory: 2Gi
         - name: pretalx-worker
           image: pretalx/standalone:v2025.1.0
           command:
             ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
           resources:
             requests:
-              memory: 350Mi
+              memory: 700Mi
               cpu: 100m
             limits:
-              memory: 350Mi
+              memory: 700Mi
           env:
             - name: PRETALX_FILESYSTEM_MEDIA
               value: /public/media
@@ -133,9 +133,58 @@ spec:
             - name: pretalx-config
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
+        - name: nginx-statics
+          image: nginx:1.25-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /public
+              name: pretalx-public
+              readOnly: true
+            - mountPath: /etc/nginx/nginx.conf
+              name: nginx-config
+              subPath: nginx.conf
+            - mountPath: /var/cache/nginx
+              name: nginx-cache
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 10
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              memory: 128Mi
+              cpu: 100m
+            limits:
+              memory: 128Mi
       volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-config
+          configMap:
+            defaultMode: 420
+            name: pretalx-nginx
         - name: pretalx-config
           configMap:
+            defaultMode: 420
             name: pretalx-config
       securityContext:
         fsGroup: 999
