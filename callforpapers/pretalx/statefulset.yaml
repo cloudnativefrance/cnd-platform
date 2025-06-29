@@ -134,7 +134,7 @@ spec:
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
         - name: nginx-statics
-          image: nginx:1.25-alpine
+          image: nginx:1.29-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
