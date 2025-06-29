@@ -10,13 +10,27 @@ spec:
     - host: cfp.cloudnativedays.fr
       http:
         paths:
-          - path: /
-            pathType: Prefix
-            backend:
+          - backend:
               service:
                 name: pretalx
                 port:
-                  number: 80
+                  name: http-static
+            path: /media
+            pathType: Prefix
+          - backend:
+              service:
+                name: pretalx
+                port:
+                  name: http-static
+            path: /static
+            pathType: Prefix
+          - backend:
+              service:
+                name: pretalx
+                port:
+                  name: http
+            path: /
+            pathType: Prefix
   tls:
     - hosts:
         - cfp.cloudnativedays.fr
