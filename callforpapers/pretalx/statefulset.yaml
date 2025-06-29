@@ -148,6 +148,8 @@ spec:
               subPath: nginx.conf
             - mountPath: /var/cache/nginx
               name: nginx-cache
+            - mountPath: /tmp
+              name: nginx-tmp
           securityContext:
             runAsUser: 101
             runAsGroup: 101
@@ -186,6 +188,8 @@ spec:
           configMap:
             defaultMode: 420
             name: pretalx-config
+        - name: nginx-tmp
+          emptyDir: {}
       securityContext:
         fsGroup: 999
         runAsUser: 999
