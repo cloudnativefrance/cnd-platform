@@ -12,3 +12,12 @@ spec:
   sourceRef:
     kind: GitRepository
     name: customer
+  healthChecks:
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-pretalx
+      namespace: cnd-callforpapers
+    - apiVersion: apps/v1
+      kind: StatefulSet
+      name: pretalx
+      namespace: cnd-callforpapers
