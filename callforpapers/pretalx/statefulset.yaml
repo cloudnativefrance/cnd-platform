@@ -202,7 +202,7 @@ spec:
         storageClassName: "node-local-retain"
         resources:
           requests:
-            storage: 5Gi
+            storage: 20Gi
     - metadata:
         name: pretalx-public
       spec:
@@ -210,4 +210,4 @@ spec:
         storageClassName: "node-local-retain"
         resources:
           requests:
-            storage: 2Gi
+            storage: 10Gi
