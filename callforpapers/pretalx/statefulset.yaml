@@ -96,20 +96,20 @@ spec:
               subPath: pretalx.cfg
           resources:
             requests:
-              memory: 1.6Gi
+              memory: 2Gi
               cpu: 300m
             limits:
-              memory: 1.6Gi
+              memory: 2Gi
         - name: pretalx-worker
           image: pretalx/standalone:v2025.1.0
           command:
             ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
           resources:
             requests:
-              memory: 350Mi
+              memory: 700Mi
               cpu: 100m
             limits:
-              memory: 350Mi
+              memory: 700Mi
           env:
             - name: PRETALX_FILESYSTEM_MEDIA
               value: /public/media
