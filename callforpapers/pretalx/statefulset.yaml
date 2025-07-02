@@ -125,6 +125,16 @@ spec:
                 secretKeyRef:
                   name: pretalx-cnpg-secret
                   key: password
+            - name: PRETALX_CELERY_BROKER
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-broker-url
+            - name: PRETALX_CELERY_BACKEND
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: celery-backend-url
           volumeMounts:
             - name: pretalx-data
               mountPath: /data
