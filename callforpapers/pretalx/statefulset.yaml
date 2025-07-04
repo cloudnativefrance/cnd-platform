@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: pretalx
-          image: pretalx/standalone:v2025.1.0
+          image: smana/pretalx:v2025.1.0-cndfr-1
           ports:
             - containerPort: 8080
           env:
