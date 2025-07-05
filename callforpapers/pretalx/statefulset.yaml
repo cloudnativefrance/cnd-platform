@@ -135,6 +135,16 @@ spec:
                 secretKeyRef:
                   name: pretalx-valkey
                   key: celery-backend-url
+            - name: PRETALX_MAIL_USER
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: login
+            - name: PRETALX_MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: master-password
           volumeMounts:
             - name: pretalx-data
               mountPath: /data
