@@ -93,7 +93,7 @@ spec:
         #
         extraOidcSealedSecret:
 
-      tmpVolumesStorageClassName: "node-local-retain"
+      tmpVolumesStorageClassName: "node-local-delete"
 
     persistence:
       enabled: false
