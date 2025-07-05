@@ -105,8 +105,8 @@ spec:
       auth:
         existingSecret: cnd-france-scw-secret
         secretKeys:
-          accessKeyId: "accesskey"
-          secretAccessKey: "secretkey"
+          accessKeyId: "access-key-id"
+          secretAccessKey: "secret-access-key"
       bucketName: cloudnativedaysfr
       region: "PAR"
       endpoint: https://s3.fr-par.scw.cloud
