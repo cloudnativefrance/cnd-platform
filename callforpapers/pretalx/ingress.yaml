@@ -3,6 +3,7 @@ kind: Ingress
 metadata:
   name: pretalx
   annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10M"
     cert-manager.io/cluster-issuer: letsencrypt
 spec:
   ingressClassName: public
