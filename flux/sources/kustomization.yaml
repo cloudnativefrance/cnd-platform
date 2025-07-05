@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - helmrepo-bitnami.yaml
+  - helmrepo-christianhuth.yaml
   - helmrepo-cloudnative-pg.yaml
   - helmrepo-mattermost.yaml
   - helmrepo-openproject.yaml

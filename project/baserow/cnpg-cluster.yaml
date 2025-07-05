@@ -1,0 +1,64 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-baserow
+spec:
+  description: "PostgreSQL cluster for the application Baserow"
+  instances: 2
+
+  bootstrap:
+    initdb:
+      database: baserow
+      owner: baserow
+      secret:
+        name: baserow-cnpg-secret
+
+  superuserSecret:
+    name: baserow-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://cloudnativedaysfr/cnpg/baserow"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: access-key-id
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secret-access-key
+        region:
+          name: cnd-france-scw-secret
+          key: region
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: 200m
+    limits:
+      memory: "768Mi"

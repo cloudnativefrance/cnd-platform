@@ -1,0 +1,140 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: baserow
+spec:
+  releaseName: baserow
+  driftDetection:
+    mode: enabled
+  chart:
+    spec:
+      chart: baserow
+      sourceRef:
+        kind: HelmRepository
+        name: christianhuth
+      version: "10.0.3"
+  interval: 10m0s
+  timeout: 8m
+  install:
+    remediation:
+      retries: 3
+  values:
+    fullnameOverride: "baserow"
+
+    frontend:
+      resources:
+        limits:
+          memory: 164Mi
+        requests:
+          cpu: 300m
+          memory: 164Mi
+
+      ingress:
+        enabled: true
+        className: "public"
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt
+          nginx.ingress.kubernetes.io/proxy-body-size: "100M"
+          nginx.ingress.kubernetes.io/client-body-buffer-size: "100M"
+        hostname: br.cloudnativedays.fr
+        tls:
+          - secretName: "baserow-tls"
+            hosts:
+              - br.cloudnativedays.fr
+      # configuration for the frontend
+      config:
+        # -- A list of file paths to Nuxt module.js files to load as additional Nuxt modules into Baserow on startup.
+        additionalModules: ""
+        # -- When opening the Baserow login page a check is run to ensure the PUBLIC_BACKEND_URL/BASEROW_PUBLIC_URL variables are set correctly and your browser can correctly connect to the backend. If misconfigured an error is shown. If you wish to disable this check and warning set this to any non empty value.
+        disablePublicUrlCheck: ""
+        # -- Set to `true` or `1` to disable Google docs file preview.
+        disableGoogleDocsFilePreview: ""
+        # -- Set to `1` to force download links to download files via XHR query to bypass `Content-Disposition: inline` that can’t be overridden in another way. If your files are stored under another origin, you also must add CORS headers to your server.
+        downloadFileViaXhr: "0"
+
+    backend:
+      asgi:
+        resources:
+          limits:
+            memory: 164Mi
+          requests:
+            cpu: 300m
+            memory: 164Mi
+
+      celery:
+        resources:
+          limits:
+            memory: 300Mi
+          requests:
+            cpu: 300m
+            memory: 300Mi
+
+      config:
+        # -- A comma separated list of additional django applications to add to the INSTALLED_APPS django setting
+        additionalApps: ""
+        # -- The maximum amount of seconds an Airtable migration import job can run.
+        airtableImportSoftTimeLimit: "1800"
+        # -- The number of concurrent worker processes used by the Baserow backend gunicorn server to process incoming requests
+        amountOfGunicornWorkers: ""
+        aws:
+          bucketName: "cloudnativedaysfr"
+          existingSecret: "baserow-cndfrance-scw-secret"
+          s3EndpointUrl: "https://s3.fr-par.scw.cloud"
+          s3RegionName: "fr-par"
+        # -- Controls how many rows can be created, deleted or updated at once using the batch endpoints.
+        batchRowsSizeLimit: "400"
+        celery:
+          amountOfWorkers: "2"
+
+        # -- When sharing views publicly a websocket connection is opened to provide realtime updates to viewers of the public link. To disable this set any non empty value. When disabled publicly shared links will need to be refreshed to see any updates to the view.
+        disableAnonymousPublicViewWsConnections: ""
+        # -- When set to any non empty value the model cache used to speed up Baserow will be disabled. Useful to enable when debugging Baserow errors if they are possibly caused by the model cache itself.
+        disableModelCache: ""
+        # -- Baserow’s formulas have an internal version number. When upgrading Baserow if the formula language has also changed then after the database migration has run Baserow will also automatically recalculate all formulas if they have a different version. Set this to any non empty value to disable this automatic update if you would prefer to run the update_formulas management command manually yourself. Formulas might break if you forget to do so after an upgrade of Baserow until and so it is recommended to leave this empty.
+        dontUpdateFormulasAfterMigration: ""
+        email:
+          existingSecret: "brevo-smtp"
+          fromEmail: "baserow@cloudnativedays.fr"
+          smtp: "true"
+          smtpHost: "smtp-relay.brevo.com"
+          smtpPort: "587"
+          smtpUser: "8f026a001@smtp-brevo.com"
+          smtpUseTls: "true"
+
+        existingSecret: "baserow-jwt"
+
+      persistence:
+        enabled: true
+        storageClassName: "node-local-retain"
+        resources: {}
+
+      wsgi:
+        resources:
+          limits:
+            memory: 164Mi
+          requests:
+            cpu: 300m
+            memory: 164Mi
+
+      ingress:
+        enabled: false # I don't know if it's needed
+
+    postgresql:
+      enabled: false
+
+    externalPostgresql:
+      auth:
+        database: baserow
+        existingSecret: "baserow-cnpg-secret"
+        userPasswordKey: "password"
+      hostname: "cnpg-baserow-rw"
+
+    redis:
+      enabled: false
+
+    externalRedis:
+      auth:
+        enabled: true
+        existingSecret: "baserow-valkey"
+        userPasswordKey: "password"
+      hostname: "baserow-valkey-primary"
