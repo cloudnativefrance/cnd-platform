@@ -1,0 +1,46 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: baserow-valkey
+spec:
+  releaseName: baserow-valkey
+  driftDetection:
+    mode: enabled
+  chart:
+    spec:
+      chart: valkey
+      sourceRef:
+        kind: HelmRepository
+        name: bitnami
+        namespace: flux-system
+      version: "3.0.16"
+  interval: 10m0s
+  install:
+    remediation:
+      retries: 3
+  values:
+    auth:
+      existingSecret: "baserow-valkey"
+      existingSecretPasswordKey: "password"
+      usePasswordFiles: false
+
+    architecture: "standalone"
+
+    primary:
+      resourcesPreset: "nano"
+      persistence:
+        size: 2Gi
+        storageClass: "node-local-retain"
+
+    replica:
+      replicaCount: 1
+      resourcesPreset: "nano"
+
+      persistence:
+        size: 1Gi
+        storageClass: "node-local-retain"
+
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
