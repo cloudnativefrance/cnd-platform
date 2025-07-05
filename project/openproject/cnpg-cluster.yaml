@@ -26,10 +26,10 @@ spec:
       s3Credentials:
         accessKeyId:
           name: cnd-france-scw-secret
-          key: accesskey
+          key: access-key-id
         secretAccessKey:
           name: cnd-france-scw-secret
-          key: secretkey
+          key: secret-access-key
         region:
           name: cnd-france-scw-secret
           key: region

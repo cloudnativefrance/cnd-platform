@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - brevo-smtp-secret.yaml
-  - cnd-france-scw-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
   - cnpg-secret.yaml
