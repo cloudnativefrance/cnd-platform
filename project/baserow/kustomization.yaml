@@ -10,3 +10,4 @@ resources:
   - helmrelease-valkey.yaml
   - helmrelease.yaml
   - jwt-secret.yaml
+  - valkey-secret.yaml
