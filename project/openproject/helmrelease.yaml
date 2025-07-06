@@ -19,6 +19,13 @@ spec:
     remediation:
       retries: 3
   values:
+    appInit:
+      resources:
+        limits:
+          memory: "700Mi"
+        requests:
+          memory: "700Mi"
+
     environment: {}
 
     ingress:
