@@ -104,7 +104,7 @@ spec:
         existingSecret: "baserow-jwt"
 
       persistence:
-        enabled: true
+        enabled: false
         storageClassName: "node-local-retain"
         resources:
           requests:
