@@ -106,7 +106,9 @@ spec:
       persistence:
         enabled: true
         storageClassName: "node-local-retain"
-        resources: {}
+        resources:
+          requests:
+            storage: 10Gi
 
       wsgi:
         resources:
