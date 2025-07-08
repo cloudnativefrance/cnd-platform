@@ -78,7 +78,7 @@ spec:
         amountOfGunicornWorkers: ""
         aws:
           bucketName: "cloudnativedaysfr"
-          existingSecret: "baserow-cndfrance-scw-secret"
+          existingSecret: "cnd-france-scw-secret"
           s3EndpointUrl: "https://s3.fr-par.scw.cloud"
           s3RegionName: "fr-par"
         # -- Controls how many rows can be created, deleted or updated at once using the batch endpoints.
