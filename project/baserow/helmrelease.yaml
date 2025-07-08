@@ -56,10 +56,10 @@ spec:
       asgi:
         resources:
           limits:
-            memory: 512Mi
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 512Mi
+            memory: 1Gi
 
       celery:
         resources:
@@ -113,10 +113,10 @@ spec:
       wsgi:
         resources:
           limits:
-            memory: 512Mi
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 512Mi
+            memory: 1Gi
 
       ingress:
         enabled: false # I don't know if it's needed
