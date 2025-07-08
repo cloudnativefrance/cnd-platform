@@ -96,10 +96,10 @@ spec:
               subPath: pretalx.cfg
           resources:
             requests:
-              memory: 2Gi
+              memory: 3Gi
               cpu: 300m
             limits:
-              memory: 2Gi
+              memory: 3Gi
         - name: pretalx-worker
           image: pretalx/standalone:v2025.1.0
           command:
