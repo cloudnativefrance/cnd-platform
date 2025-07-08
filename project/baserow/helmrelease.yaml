@@ -24,10 +24,10 @@ spec:
     frontend:
       resources:
         limits:
-          memory: 164Mi
+          memory: 512Mi
         requests:
           cpu: 300m
-          memory: 164Mi
+          memory: 512Mi
 
       ingress:
         enabled: true
@@ -64,10 +64,10 @@ spec:
       celery:
         resources:
           limits:
-            memory: 300Mi
+            memory: 764Mi
           requests:
             cpu: 300m
-            memory: 300Mi
+            memory: 764Mi
 
       config:
         # -- A comma separated list of additional django applications to add to the INSTALLED_APPS django setting
