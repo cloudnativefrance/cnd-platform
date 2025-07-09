@@ -22,8 +22,6 @@ spec:
     fullnameOverride: "baserow"
 
     frontend:
-      publicUrl: "https://br-backend.cloudnativedays.fr"
-
       resources:
         limits:
           memory: 512Mi
@@ -55,9 +53,6 @@ spec:
         downloadFileViaXhr: "0"
 
     backend:
-      publicUrl: "https://br-backend.cloudnativedays.fr"
-      privateUrl: "http://baserow-wsgi:8000"
-
       asgi:
         resources:
           limits:
@@ -135,6 +130,10 @@ spec:
           - secretName: "baserow-tls"
             hosts:
               - br-backend.cloudnativedays.fr
+
+    config:
+      publicBackendUrl: "https://br-backend.cloudnativedays.fr"
+      publicFrontendUrl: "https://br.cloudnativedays.fr"
 
     postgresql:
       enabled: false
