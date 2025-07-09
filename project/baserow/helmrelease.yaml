@@ -22,6 +22,8 @@ spec:
     fullnameOverride: "baserow"
 
     frontend:
+      publicUrl: "https://br-backend.cloudnativedays.fr"
+
       resources:
         limits:
           memory: 512Mi
@@ -53,6 +55,9 @@ spec:
         downloadFileViaXhr: "0"
 
     backend:
+      publicUrl: "https://br-backend.cloudnativedays.fr"
+      privateUrl: "http://baserow-wsgi:8000"
+
       asgi:
         resources:
           limits:
@@ -119,7 +124,17 @@ spec:
             memory: 1Gi
 
       ingress:
-        enabled: false # I don't know if it's needed
+        enabled: true
+        className: "public"
+        annotations:
+          cert-manager.io/cluster-issuer: letsencrypt
+          nginx.ingress.kubernetes.io/proxy-body-size: "100M"
+          nginx.ingress.kubernetes.io/client-body-buffer-size: "100M"
+        hostname: br-backend.cloudnativedays.fr
+        tls:
+          - secretName: "baserow-tls"
+            hosts:
+              - br-backend.cloudnativedays.fr
 
     postgresql:
       enabled: false
