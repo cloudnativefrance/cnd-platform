@@ -127,7 +127,7 @@ spec:
           nginx.ingress.kubernetes.io/client-body-buffer-size: "100M"
         hostname: br-backend.cloudnativedays.fr
         tls:
-          - secretName: "baserow-tls"
+          - secretName: "baserow-backend-tls"
             hosts:
               - br-backend.cloudnativedays.fr
 
