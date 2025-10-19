@@ -64,10 +64,10 @@ spec:
       celery:
         resources:
           limits:
-            memory: 764Mi
+            memory: 1Gi
           requests:
             cpu: 300m
-            memory: 764Mi
+            memory: 1Gi
 
       config:
         # -- A comma separated list of additional django applications to add to the INSTALLED_APPS django setting
