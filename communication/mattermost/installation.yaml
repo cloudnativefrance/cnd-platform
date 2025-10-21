@@ -4,7 +4,6 @@ metadata:
   name: cnd-france
 spec:
   version: 10.8.1
-  size: "3000users"
   ingress:
     enabled: true
     host: mm.cloudnativedays.fr
@@ -12,7 +11,7 @@ spec:
     tlsSecret: "mattermost-tls"
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt
-      nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+      nginx.ingress.kubernetes.io/proxy-body-size: "100m"
       nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
       nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
