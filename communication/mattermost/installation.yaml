@@ -17,11 +17,6 @@ spec:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       # WebSocket-specific configuration
       nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
-      nginx.ingress.kubernetes.io/configuration-snippet: |
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Real-IP $remote_addr;
   database:
     external:
       secret: mattermost-cnpg-secret
