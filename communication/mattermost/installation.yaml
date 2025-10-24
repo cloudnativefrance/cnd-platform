@@ -12,11 +12,16 @@ spec:
     annotations:
       cert-manager.io/cluster-issuer: letsencrypt
       nginx.ingress.kubernetes.io/proxy-body-size: "100m"
-      nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
-      nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+      # WebSocket timeouts - Mattermost requires 3600s (1 hour)
+      nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+      nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
-      # WebSocket-specific configuration
+      # WebSocket support
       nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+      # Proxy buffer settings for large headers (prevents "upstream sent too big header")
+      nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+      nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
   database:
     external:
       secret: mattermost-cnpg-secret
