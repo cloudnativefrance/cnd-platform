@@ -36,10 +36,8 @@ spec:
           key: region
       wal:
         compression: gzip
-        encryption: AES256
       data:
         compression: gzip
-        encryption: AES256
     retentionPolicy: "90d"
 
   monitoring:
