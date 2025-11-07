@@ -19,6 +19,8 @@ spec:
       nginx.ingress.kubernetes.io/ssl-redirect: "true"
       # WebSocket support
       nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+      # Session affinity for websocket stability with multiple replicas
+      nginx.ingress.kubernetes.io/upstream-hash-by: "$remote_addr"
       # Proxy buffer settings for large headers (prevents "upstream sent too big header")
       nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
       nginx.ingress.kubernetes.io/proxy-buffers-number: "4"
