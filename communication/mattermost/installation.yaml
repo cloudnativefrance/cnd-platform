@@ -3,12 +3,12 @@ kind: Mattermost
 metadata:
   name: cnd-france
 spec:
-  version: 10.8.1
+  version: 10.11.6
   # Disable cluster mode - not needed with session affinity for 2 replicas
   # Cluster mode requires gossip port 8074 which is not exposed by the operator
   mattermostEnv:
-  - name: MM_CLUSTERSETTINGS_ENABLE
-    value: "false"
+    - name: MM_CLUSTERSETTINGS_ENABLE
+      value: "false"
   ingress:
     enabled: true
     host: mm.cloudnativedays.fr
