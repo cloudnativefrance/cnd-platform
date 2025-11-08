@@ -14,7 +14,7 @@ spec:
         kind: HelmRepository
         name: mattermost
         namespace: cnd-operators
-      version: "1.0.3"
+      version: "1.0.4"
   interval: 10m0s
   timeout: 3m
   install:
