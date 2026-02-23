@@ -66,6 +66,9 @@ spec:
         host: chat.cloudnativedays.fr
         tlsSecret: matrix-element-tls
 
+    postgres:
+      enabled: false
+
     elementAdmin:
       enabled: false
 
