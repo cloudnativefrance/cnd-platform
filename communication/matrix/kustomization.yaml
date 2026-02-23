@@ -11,4 +11,6 @@ resources:
   - synapse-cnpg-secret.yaml
   - mas-cnpg-secret.yaml
   - mas-google-oidc-secret.yaml
+  - mas-email-secret.yaml
+  - synapse-email-secret.yaml
   - helmrelease.yaml
