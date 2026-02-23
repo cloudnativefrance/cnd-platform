@@ -34,6 +34,9 @@ spec:
       ingress:
         host: matrix.cloudnativedays.fr
         tlsSecret: matrix-synapse-tls
+      media:
+        storage:
+          storageClassName: node-local-retain
       postgres:
         host: cnpg-synapse-rw.cnd-communication.svc
         port: 5432
