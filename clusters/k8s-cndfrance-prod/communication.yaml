@@ -9,6 +9,7 @@ spec:
   path: ./communication
   dependsOn:
     - name: cnd-operators
+    - name: cnd-flux-sources
   sourceRef:
     kind: GitRepository
     name: customer
@@ -20,4 +21,16 @@ spec:
     - apiVersion: postgresql.cnpg.io/v1
       kind: Cluster
       name: cnpg-mattermost
+      namespace: cnd-communication
+    - apiVersion: helm.toolkit.fluxcd.io/v2
+      kind: HelmRelease
+      name: matrix-stack
+      namespace: cnd-communication
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-synapse
+      namespace: cnd-communication
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-mas
       namespace: cnd-communication
