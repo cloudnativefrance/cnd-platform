@@ -34,6 +34,10 @@ spec:
       ingress:
         host: matrix.cloudnativedays.fr
         tlsSecret: matrix-synapse-tls
+      additional:
+        0-email:
+          configSecret: synapse-email-config
+          configSecretKey: config.yaml
       media:
         storage:
           storageClassName: node-local-retain
@@ -54,6 +58,9 @@ spec:
       additional:
         0-google-oidc:
           configSecret: mas-google-oidc-config
+          configSecretKey: config.yaml
+        1-email:
+          configSecret: mas-email-config
           configSecretKey: config.yaml
       postgres:
         host: cnpg-mas-rw.cnd-communication.svc
