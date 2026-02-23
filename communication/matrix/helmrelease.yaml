@@ -35,7 +35,7 @@ spec:
         host: matrix.cloudnativedays.fr
         tlsSecret: matrix-synapse-tls
       postgres:
-        host: cnpg-synapse-rw.cnd-matrix.svc
+        host: cnpg-synapse-rw.cnd-communication.svc
         port: 5432
         user: synapse
         password:
@@ -49,7 +49,7 @@ spec:
         host: auth-matrix.cloudnativedays.fr
         tlsSecret: matrix-mas-tls
       postgres:
-        host: cnpg-mas-rw.cnd-matrix.svc
+        host: cnpg-mas-rw.cnd-communication.svc
         port: 5432
         user: mas
         password:

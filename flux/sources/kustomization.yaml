@@ -5,4 +5,5 @@ resources:
   - helmrepo-bitnami.yaml
   - helmrepo-christianhuth.yaml
   - helmrepo-cloudnative-pg.yaml
+  - helmrepo-ess.yaml
   - helmrepo-mattermost.yaml

@@ -30,7 +30,7 @@ graph TB
         I5["mrtc.cloudnativedays.fr"]
     end
 
-    subgraph "cnd-matrix namespace"
+    subgraph "cnd-communication namespace"
         subgraph "matrix-stack HelmRelease"
             EW["Element Web<br/><i>Web client UI</i>"]
             SY["Synapse<br/><i>Matrix homeserver</i>"]
@@ -97,7 +97,7 @@ Both CNPG clusters run **2 instances** (primary + replica) for high availability
 ## GitOps structure
 
 ```
-matrix/
+communication/matrix/
   kustomization.yaml              # Kustomize resource list
   helmrelease.yaml                # ESS matrix-stack HelmRelease
   cnpg-cluster-synapse.yaml       # CNPG cluster for Synapse
@@ -110,7 +110,7 @@ matrix/
 flux/sources/
   helmrepo-ess.yaml               # OCI HelmRepository (ghcr.io/element-hq/ess-helm)
 clusters/k8s-cndfrance-prod/
-  matrix.yaml                     # Flux Kustomization
+  communication.yaml              # Flux Kustomization (shared with Mattermost)
 ```
 
 ## Post-deployment steps
@@ -119,7 +119,7 @@ clusters/k8s-cndfrance-prod/
 2. **SealedSecrets**: run `kubeseal` to generate encrypted values for the 3 secret files
 3. **First admin user**:
    ```bash
-   kubectl exec -n cnd-matrix -it deploy/matrix-stack-matrix-authentication-service \
+   kubectl exec -n cnd-communication -it deploy/matrix-stack-matrix-authentication-service \
      -- mas-cli manage register-user
    ```
 4. **Federation test**: verify at https://federationtester.matrix.org/ with `matrix.cloudnativedays.fr`
