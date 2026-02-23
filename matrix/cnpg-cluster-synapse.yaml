@@ -1,0 +1,56 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-synapse
+spec:
+  description: "Synapse CNPG"
+  instances: 2
+  bootstrap:
+    initdb:
+      database: synapse
+      owner: synapse
+      secret:
+        name: synapse-cnpg-secret
+
+  superuserSecret:
+    name: synapse-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "gs://cloudnativedaysfr/cnpg/synapse"
+      googleCredentials:
+        applicationCredentials:
+          name: cnd-france-gcs-secret
+          key: gcsCredentials
+      wal:
+        compression: gzip
+        encryption: AES256
+      data:
+        compression: gzip
+        encryption: AES256
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: 200m
+    limits:
+      memory: "768Mi"
