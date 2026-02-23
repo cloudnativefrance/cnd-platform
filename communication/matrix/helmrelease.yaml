@@ -64,8 +64,7 @@ spec:
         tlsSecret: matrix-element-tls
 
     elementAdmin:
-      ingress:
-        enabled: false
+      enabled: false
 
     matrixRTC:
       ingress:
