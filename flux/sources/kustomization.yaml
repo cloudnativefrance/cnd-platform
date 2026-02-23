@@ -6,4 +6,3 @@ resources:
   - helmrepo-christianhuth.yaml
   - helmrepo-cloudnative-pg.yaml
   - helmrepo-mattermost.yaml
-  - helmrepo-openproject.yaml
