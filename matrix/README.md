@@ -10,8 +10,8 @@ Cloud Native Days France deploys [Matrix](https://matrix.org/) as a team communi
 |-----------|-----------|------|
 | **Synapse** | `matrix.cloudnativedays.fr` | Matrix homeserver — rooms, messages, federation |
 | **Element Web** | `chat.cloudnativedays.fr` | Web client (static SPA) |
-| **MAS** | `account.cloudnativedays.fr` | OIDC authentication provider |
-| **Element Admin** | `admin-matrix.cloudnativedays.fr` | Administration console |
+| **MAS** | `auth-matrix.cloudnativedays.fr` | OIDC authentication provider |
+| **Element Admin** | *No ingress — port-forward only* | Administration console |
 | **Matrix RTC** | `mrtc.cloudnativedays.fr` | VoIP / Element Call signaling |
 
 ## Architecture Diagram
@@ -26,8 +26,7 @@ graph TB
         direction LR
         I1["chat.cloudnativedays.fr"]
         I2["matrix.cloudnativedays.fr"]
-        I3["account.cloudnativedays.fr"]
-        I4["admin-matrix.cloudnativedays.fr"]
+        I3["auth-matrix.cloudnativedays.fr"]
         I5["mrtc.cloudnativedays.fr"]
     end
 
@@ -58,7 +57,6 @@ graph TB
     Browser --> I1 --> EW
     Browser --> I2 --> SY
     Browser --> I3 --> MAS
-    Browser --> I4 --> EA
     Browser --> I5 --> RTC
 
     EW -- "Client-Server API" --> SY
@@ -92,7 +90,7 @@ Both CNPG clusters run **2 instances** (primary + replica) for high availability
 1. **Element Web** is a static SPA that talks to Synapse via the [Client-Server API](https://spec.matrix.org/latest/client-server-api/)
 2. **Synapse** handles rooms, messages, and federation. It delegates all authentication to MAS via MSC3861 (OIDC-native auth delegation)
 3. **MAS** handles login flows, token issuance, and session management
-4. **Element Admin** calls Synapse's [Admin API](https://element-hq.github.io/synapse/latest/usage/administration/admin_api/index.html)
+4. **Element Admin** calls Synapse's [Admin API](https://element-hq.github.io/synapse/latest/usage/administration/admin_api/index.html) — no public ingress, access via `kubectl port-forward`
 5. **Matrix RTC** handles VoIP signaling through Synapse
 6. **Redis** is internal only — pub/sub between Synapse workers when running in multi-worker mode (bundled by the chart, not a persistent data store)
 
@@ -117,7 +115,7 @@ clusters/k8s-cndfrance-prod/
 
 ## Post-deployment steps
 
-1. **DNS**: create A/CNAME records for `matrix`, `chat`, `account`, `admin-matrix`, `mrtc` under `cloudnativedays.fr`
+1. **DNS**: create A/CNAME records for `matrix`, `chat`, `auth-matrix`, `mrtc` under `cloudnativedays.fr`
 2. **SealedSecrets**: run `kubeseal` to generate encrypted values for the 3 secret files
 3. **First admin user**:
    ```bash

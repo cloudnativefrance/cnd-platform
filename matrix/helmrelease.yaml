@@ -46,7 +46,7 @@ spec:
 
     matrixAuthenticationService:
       ingress:
-        host: account.cloudnativedays.fr
+        host: auth-matrix.cloudnativedays.fr
         tlsSecret: matrix-mas-tls
       postgres:
         host: cnpg-mas-rw.cnd-matrix.svc
@@ -65,8 +65,7 @@ spec:
 
     elementAdmin:
       ingress:
-        host: admin-matrix.cloudnativedays.fr
-        tlsSecret: matrix-admin-tls
+        enabled: false
 
     matrixRTC:
       ingress:
