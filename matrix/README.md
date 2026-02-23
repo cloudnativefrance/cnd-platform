@@ -47,7 +47,7 @@ graph TB
         end
 
         subgraph "Backup"
-            GCS["GCS Bucket<br/>gs://cloudnativedaysfr/cnpg/"]
+            SCW["Scaleway Object Storage<br/>s3://cloudnativedaysfr/cnpg/"]
         end
     end
 
@@ -70,8 +70,8 @@ graph TB
     SY --> DB_SY
     MAS --> DB_MAS
 
-    DB_SY -- "WAL + data backup" --> GCS
-    DB_MAS -- "WAL + data backup" --> GCS
+    DB_SY -- "WAL + data backup" --> SCW
+    DB_MAS -- "WAL + data backup" --> SCW
 
     SY <-- "Federation API<br/>port 8448" --> Other
 ```
@@ -85,7 +85,7 @@ MAS (Matrix Authentication Service) is a **standalone OIDC provider** that repla
 | `cnpg-synapse` | Synapse | Rooms, messages, events, room state, user profiles, federation data |
 | `cnpg-mas` | MAS | OIDC sessions, OAuth2 tokens, authentication credentials, user-device mappings |
 
-Both CNPG clusters run **2 instances** (primary + replica) for high availability, with daily backups and continuous WAL archiving to GCS.
+Both CNPG clusters run **2 instances** (primary + replica) for high availability, with daily backups and continuous WAL archiving to Scaleway Object Storage.
 
 ## Component interactions
 
@@ -108,7 +108,7 @@ matrix/
   cnpg-scheduled-backup-mas.yaml
   synapse-cnpg-secret.yaml        # SealedSecret — DB credentials
   mas-cnpg-secret.yaml            # SealedSecret — DB credentials
-  cnd-france-gcs-secret.yaml      # SealedSecret — GCS backup credentials
+  cnd-france-scw-secret.yaml      # SealedSecret — Scaleway backup credentials
 flux/sources/
   helmrepo-ess.yaml               # OCI HelmRepository (ghcr.io/element-hq/ess-helm)
 clusters/k8s-cndfrance-prod/

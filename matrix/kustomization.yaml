@@ -3,7 +3,7 @@ kind: Kustomization
 namespace: cnd-matrix
 
 resources:
-  - cnd-france-gcs-secret.yaml
+  - cnd-france-scw-secret.yaml
   - cnpg-cluster-synapse.yaml
   - cnpg-cluster-mas.yaml
   - cnpg-scheduled-backup-synapse.yaml
