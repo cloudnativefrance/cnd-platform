@@ -51,6 +51,10 @@ spec:
       ingress:
         host: auth-matrix.cloudnativedays.fr
         tlsSecret: matrix-mas-tls
+      additional:
+        0-google-oidc:
+          configSecret: mas-google-oidc-config
+          configSecretKey: config.yaml
       postgres:
         host: cnpg-mas-rw.cnd-communication.svc
         port: 5432
