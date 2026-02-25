@@ -42,6 +42,47 @@ spec:
         0-email:
           configSecret: synapse-email-config
           configSecretKey: config.yaml
+        1-security:
+          config: |
+            url_preview_enabled: false
+            federation_verify_certificates: true
+            federation_client_minimum_tls_version: "1.2"
+            allow_device_name_lookup_over_federation: false
+            enable_registration: false
+            enable_registration_without_verification: false
+            allow_guest_access: false
+            rc_message:
+              per_second: 0.2
+              burst_count: 10
+            rc_login:
+              address:
+                per_second: 0.003
+                burst_count: 5
+              account:
+                per_second: 0.003
+                burst_count: 5
+            rc_joins:
+              local:
+                per_second: 0.1
+                burst_count: 10
+              remote:
+                per_second: 0.01
+                burst_count: 10
+        2-caching:
+          config: |
+            caches:
+              global_factor: 1.0
+              expire_caches: true
+              cache_entry_ttl: 30m
+              cache_autotuning:
+                max_cache_memory_usage: 512M
+                target_cache_memory_usage: 384M
+                min_cache_ttl: 5m
+        3-media-retention:
+          config: |
+            media_retention:
+              local_media_lifetime: 90d
+              remote_media_lifetime: 14d
       media:
         storage:
           storageClassName: node-local-retain
@@ -54,6 +95,9 @@ spec:
           secretKey: password
         database: synapse
         sslMode: prefer
+      logging:
+        levelOverrides:
+          synapse.storage.SQL: WARNING
 
     matrixAuthenticationService:
       ingress:
@@ -80,6 +124,24 @@ spec:
       ingress:
         host: chat.cloudnativedays.fr
         tlsSecret: matrix-element-tls
+      additional:
+        0-config:
+          config: |
+            {
+              "disable_custom_urls": true,
+              "brand": "Cloud Native Days France",
+              "default_theme": "dark",
+              "room_directory": {
+                "servers": ["matrix.cloudnativedays.fr"]
+              },
+              "show_labs_settings": false,
+              "default_country_code": "FR",
+              "setting_defaults": {
+                "MessageComposerInput.showStickersButton": false,
+                "UIFeature.feedback": false,
+                "UIFeature.shareSocial": false
+              }
+            }
 
     postgres:
       enabled: false
