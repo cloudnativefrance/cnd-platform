@@ -101,7 +101,7 @@ spec:
             limits:
               memory: 4Gi
         - name: pretalx-worker
-          image: pretalx/standalone:v2025.1.0
+          image: pretalx/standalone:v2025.2.3
           command:
             ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
           resources:
