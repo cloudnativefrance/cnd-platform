@@ -30,7 +30,7 @@ spec:
         nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
         nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 
-    wellKnown:
+    wellKnownDelegation:
       ingress:
         tlsSecret: matrix-synapse-tls
 
@@ -125,23 +125,22 @@ spec:
         host: chat.cloudnativedays.fr
         tlsSecret: matrix-element-tls
       additional:
-        0-config:
-          config: |
-            {
-              "disable_custom_urls": true,
-              "brand": "Cloud Native Days France",
-              "default_theme": "dark",
-              "room_directory": {
-                "servers": ["matrix.cloudnativedays.fr"]
-              },
-              "show_labs_settings": false,
-              "default_country_code": "FR",
-              "setting_defaults": {
-                "MessageComposerInput.showStickersButton": false,
-                "UIFeature.feedback": false,
-                "UIFeature.shareSocial": false
-              }
+        0-config: |
+          {
+            "disable_custom_urls": true,
+            "brand": "Cloud Native Days France",
+            "default_theme": "dark",
+            "room_directory": {
+              "servers": ["matrix.cloudnativedays.fr"]
+            },
+            "show_labs_settings": false,
+            "default_country_code": "FR",
+            "setting_defaults": {
+              "MessageComposerInput.showStickersButton": false,
+              "UIFeature.feedback": false,
+              "UIFeature.shareSocial": false
             }
+          }
 
     postgres:
       enabled: false
