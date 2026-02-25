@@ -15,6 +15,18 @@ spec:
   superuserSecret:
     name: mas-cnpg-secret
 
+  postgresql:
+    parameters:
+      effective_cache_size: "384MB"
+      work_mem: "8MB"
+      maintenance_work_mem: "128MB"
+      autovacuum_vacuum_scale_factor: "0.05"
+      autovacuum_analyze_scale_factor: "0.025"
+      autovacuum_vacuum_cost_delay: "2ms"
+      tcp_keepalives_idle: "10"
+      tcp_keepalives_interval: "10"
+      tcp_keepalives_count: "3"
+
   storage:
     storageClass: node-local-retain
     size: 10Gi
