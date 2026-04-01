@@ -12,10 +12,13 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: christianhuth
-      version: "4.1.7"
+      version: "7.0.14"
   interval: 10m0s
   timeout: 8m
   install:
+    remediation:
+      retries: 3
+  upgrade:
     remediation:
       retries: 3
   values:
@@ -41,16 +44,6 @@ spec:
           - secretName: "baserow-tls"
             hosts:
               - br.cloudnativedays.fr
-      # configuration for the frontend
-      config:
-        # -- A list of file paths to Nuxt module.js files to load as additional Nuxt modules into Baserow on startup.
-        additionalModules: ""
-        # -- When opening the Baserow login page a check is run to ensure the PUBLIC_BACKEND_URL/BASEROW_PUBLIC_URL variables are set correctly and your browser can correctly connect to the backend. If misconfigured an error is shown. If you wish to disable this check and warning set this to any non empty value.
-        disablePublicUrlCheck: ""
-        # -- Set to `true` or `1` to disable Google docs file preview.
-        disableGoogleDocsFilePreview: ""
-        # -- Set to `1` to force download links to download files via XHR query to bypass `Content-Disposition: inline` that can’t be overridden in another way. If your files are stored under another origin, you also must add CORS headers to your server.
-        downloadFileViaXhr: "0"
 
     backend:
       asgi:
@@ -70,28 +63,15 @@ spec:
             memory: 1Gi
 
       config:
-        # -- A comma separated list of additional django applications to add to the INSTALLED_APPS django setting
-        additionalApps: ""
-        # -- The maximum amount of seconds an Airtable migration import job can run.
         airtableImportSoftTimeLimit: "1800"
-        # -- The number of concurrent worker processes used by the Baserow backend gunicorn server to process incoming requests
-        amountOfGunicornWorkers: ""
         aws:
           bucketName: "cloudnativedaysfr"
           existingSecret: "cnd-france-scw-secret"
           s3EndpointUrl: "https://s3.fr-par.scw.cloud"
           s3RegionName: "fr-par"
-        # -- Controls how many rows can be created, deleted or updated at once using the batch endpoints.
         batchRowsSizeLimit: "400"
         celery:
           amountOfWorkers: "2"
-
-        # -- When sharing views publicly a websocket connection is opened to provide realtime updates to viewers of the public link. To disable this set any non empty value. When disabled publicly shared links will need to be refreshed to see any updates to the view.
-        disableAnonymousPublicViewWsConnections: ""
-        # -- When set to any non empty value the model cache used to speed up Baserow will be disabled. Useful to enable when debugging Baserow errors if they are possibly caused by the model cache itself.
-        disableModelCache: ""
-        # -- Baserow’s formulas have an internal version number. When upgrading Baserow if the formula language has also changed then after the database migration has run Baserow will also automatically recalculate all formulas if they have a different version. Set this to any non empty value to disable this automatic update if you would prefer to run the update_formulas management command manually yourself. Formulas might break if you forget to do so after an upgrade of Baserow until and so it is recommended to leave this empty.
-        dontUpdateFormulasAfterMigration: ""
         email:
           existingSecret: "brevo-smtp"
           fromEmail: "baserow@cloudnativedays.fr"
@@ -100,15 +80,10 @@ spec:
           smtpPort: "587"
           smtpUser: "8f026a001@smtp-brevo.com"
           smtpUseTls: "true"
-
         existingSecret: "baserow-jwt"
 
       persistence:
         enabled: false
-        storageClassName: "node-local-retain"
-        resources:
-          requests:
-            storage: 10Gi
 
       wsgi:
         resources:
