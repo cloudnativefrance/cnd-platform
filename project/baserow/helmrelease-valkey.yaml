@@ -27,17 +27,14 @@ spec:
     architecture: "standalone"
 
     primary:
-      resourcesPreset: "nano"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          memory: 384Mi
       persistence:
         size: 2Gi
-        storageClass: "node-local-retain"
-
-    replica:
-      replicaCount: 1
-      resourcesPreset: "nano"
-
-      persistence:
-        size: 1Gi
         storageClass: "node-local-retain"
 
     metrics:
