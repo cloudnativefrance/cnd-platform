@@ -30,9 +30,9 @@ spec:
       resources:
         requests:
           cpu: 100m
-          memory: 256Mi
+          memory: 512Mi
         limits:
-          memory: 384Mi
+          memory: 768Mi
       persistence:
         size: 2Gi
         storageClass: "node-local-retain"
