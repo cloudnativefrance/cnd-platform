@@ -1,0 +1,17 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1beta2
+kind: Kustomization
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  prune: true
+  interval: 2m0s
+  path: ./website
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: website
+      namespace: cnd-website
