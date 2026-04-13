@@ -6,6 +6,13 @@ metadata:
   namespace: cnd-website
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
+    # Basic auth — staging domain is not ready for public access.
+    # Credentials stored as a SealedSecret in basic-auth-secret.yaml
+    # (bcrypt htpasswd, username 'cnd'). Rotate by sealing a new htpasswd
+    # line into the same Secret name.
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: website-basic-auth
+    nginx.ingress.kubernetes.io/auth-realm: "CND France 2027 — staging preview"
     # Temporary domain — block search-engine indexing until cutover to
     # cloudnativedays.fr. Applied at the edge so every response carries
     # the header (covers HTML, CSS, JS, images, XML sitemaps, etc.).
