@@ -13,11 +13,12 @@ metadata:
     nginx.ingress.kubernetes.io/auth-type: basic
     nginx.ingress.kubernetes.io/auth-secret: website-basic-auth
     nginx.ingress.kubernetes.io/auth-realm: "CND France 2027 — staging preview"
-    # Temporary domain — block search-engine indexing until cutover to
-    # cloudnativedays.fr. Applied at the edge so every response carries
-    # the header (covers HTML, CSS, JS, images, XML sitemaps, etc.).
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;
+    # Search-engine indexing protection: the basic-auth gate above blocks
+    # every crawler, so a dedicated X-Robots-Tag header is redundant. We
+    # previously set it via a configuration-snippet annotation, but that
+    # annotation class is disabled cluster-wide (nginx-ingress CVE hardening).
+    # If the gate is ever removed (e.g. cutover to cloudnativedays.fr),
+    # swap back to a noindex story before going public.
 spec:
   ingressClassName: public
   rules:
