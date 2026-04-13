@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: website
+  namespace: cnd-website
+  labels:
+    app.kubernetes.io/name: website
+    app.kubernetes.io/component: static-site
+    app.kubernetes.io/part-of: cnd-france
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: website

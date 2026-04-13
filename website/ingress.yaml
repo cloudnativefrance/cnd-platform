@@ -1,0 +1,30 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: website
+  namespace: cnd-website
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # Temporary domain — block search-engine indexing until cutover to
+    # cloudnativedays.fr. Applied at the edge so every response carries
+    # the header (covers HTML, CSS, JS, images, XML sitemaps, etc.).
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header X-Robots-Tag "noindex, nofollow, noarchive, nosnippet" always;
+spec:
+  ingressClassName: public
+  rules:
+    - host: 2027.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: website
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - 2027.cloudnativedays.fr
+      secretName: website-tls
