@@ -31,7 +31,7 @@ spec:
         fsGroup: 0
       containers:
         - name: website
-          image: ghcr.io/cloudnativefrance/website:2956cec
+          image: ghcr.io/cloudnativefrance/website:4b568c2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
