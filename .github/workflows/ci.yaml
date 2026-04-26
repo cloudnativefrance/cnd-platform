@@ -16,7 +16,7 @@ jobs:
 
 
       - name: Validate Kubernetes manifests
-        uses: dagger/dagger-for-github@v7
+        uses: dagger/dagger-for-github@v8.4.1
         with:
           version: "latest"
           verb: call
