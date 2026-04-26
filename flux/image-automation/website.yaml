@@ -1,0 +1,72 @@
+---
+# Scans ghcr.io/cloudnativefrance/website for new tags.
+# The package is public — no imagePullSecret needed.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/website
+  interval: 5m
+---
+# Selects the most recent image built from `main`.
+#
+# Requires the upstream website CI to publish tags shaped like
+# `main-<short-sha>-<unix-ts>` (e.g. main-114f069-1729900000).
+# Until that's in place the policy will report no matching tags
+# and ImageUpdateAutomation will not change the deployment.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-website
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+# Watches the `customer` GitRepository, scans files under ./website
+# for `$imagepolicy` markers, and rewrites the image tag whenever
+# the ImagePolicy above resolves a newer one. Pushes the change
+# back to main so the existing cnd-website Kustomization rolls it out.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  interval: 5m
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  git:
+    checkout:
+      ref:
+        branch: main
+    commit:
+      author:
+        email: fluxcdbot@cloudnativedays.fr
+        name: fluxcdbot
+      messageTemplate: |
+        chore(website): auto-update image
+
+        Files:
+        {{ range $filename, $_ := .Updated.Files -}}
+        - {{ $filename }}
+        {{ end -}}
+
+        Images:
+        {{ range .Updated.Images -}}
+        - {{.}}
+        {{ end -}}
+    push:
+      branch: main
+  update:
+    path: ./website
+    strategy: Setters
