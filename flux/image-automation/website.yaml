@@ -1,0 +1,48 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/website
+  interval: 30m
+---
+# Tag pattern requires the upstream website CI to publish images as
+# `main-<short-sha>-<unix-ts>` — Flux ImagePolicy cannot order bare git SHAs.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-website
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: cnd-website
+  namespace: flux-system
+spec:
+  interval: 30m
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  git:
+    commit:
+      author:
+        email: fluxcdbot@cloudnativedays.fr
+        name: fluxcdbot
+      messageTemplate: |
+        chore(website): update image to {{range .Updated.Images}}{{println .}}{{end}}
+    push:
+      branch: main
+  update:
+    path: ./website
