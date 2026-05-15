@@ -1,0 +1,106 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-albums
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: web-albums
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: ente
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-albums
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-albums
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: ente
+    spec:
+      containers:
+        - name: web-albums
+          image: ghcr.io/cloudnativefrance/ente-web-albums:latest # {"$imagepolicy": "flux-system:cnd-ente-web-albums"}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-albums
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: web-albums
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: web-albums
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-albums
+  namespace: cnd-photos
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: public
+  rules:
+    - host: albums.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-albums
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - albums.cloudnativedays.fr
+      secretName: web-albums-tls
