@@ -20,7 +20,7 @@ data:
   museum.yaml: |
     apps:
       public-albums: https://albums.cloudnativedays.fr
-      accounts:      https://accounts.cloudnativedays.fr
+      accounts:      https://accounts.photos.cloudnativedays.fr
 
     db:
       host: cnpg-ente-rw
