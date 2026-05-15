@@ -43,7 +43,7 @@ data:
       host: smtp-relay.brevo.com
       port: 587
       username: 8f026a001@smtp-brevo.com
-      email: photos@cloudnativedays.fr
+      email: communication@cloudnativedays.fr
       encryption: tls
       # password ← env ENTE_SMTP_PASSWORD
 
