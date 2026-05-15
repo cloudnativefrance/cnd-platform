@@ -50,14 +50,17 @@ spec:
                 secretKeyRef:
                   name: ente-cnpg-secret
                   key: password
-            # Storage entry s3.scw-eu-fr-v3 — env-var override mangling
-            # turns hyphens AND nesting into underscores.
-            - name: ENTE_S3_SCW_EU_FR_V3_KEY
+            # Storage entry name s3.b2-eu-cen — env-var override mangling
+            # turns hyphens AND nesting into underscores. The 'b2-eu-cen'
+            # name is used because Ente's repo/file.go has a hardcoded check
+            # accepting only B2 or Wasabi as primary hot DC; we point its
+            # endpoint/region at Scaleway (see museum-config.yaml).
+            - name: ENTE_S3_B2_EU_CEN_KEY
               valueFrom:
                 secretKeyRef:
                   name: cnd-france-scw-secret
                   key: access-key-id
-            - name: ENTE_S3_SCW_EU_FR_V3_SECRET
+            - name: ENTE_S3_B2_EU_CEN_SECRET
               valueFrom:
                 secretKeyRef:
                   name: cnd-france-scw-secret
