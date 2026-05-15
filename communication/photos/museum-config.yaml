@@ -44,7 +44,10 @@ data:
       port: 587
       username: 8f026a001@smtp-brevo.com
       email: communication@cloudnativedays.fr
-      encryption: tls
+      # encryption is intentionally unset: museum treats "tls"/"ssl" as
+      # IMPLICIT TLS (SMTPS, port 465). For Brevo's port 587 we want
+      # STARTTLS, which Go's smtp.SendMail negotiates automatically when
+      # encryption is empty and the server advertises it.
       # password ← env ENTE_SMTP_PASSWORD
 
     webauthn:
