@@ -1,0 +1,160 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: museum
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: museum
+    app.kubernetes.io/component: api
+    app.kubernetes.io/part-of: ente
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate, not RollingUpdate: museum holds an in-process lock table;
+  # running two pods briefly during a rolling update is asking for trouble.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: museum
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: museum
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: ente
+    spec:
+      containers:
+        - name: museum
+          # Pinned to the SHA tag corresponding to today's :latest. Bump
+          # by checking https://github.com/ente-io/ente/pkgs/container/server
+          image: ghcr.io/ente-io/server:449284a6a119a2275928d21987453f88fbde9565
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          # Museum reads /museum.yaml at startup.
+          volumeMounts:
+            - name: config
+              mountPath: /museum.yaml
+              subPath: museum.yaml
+          env:
+            - name: ENTE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ente-cnpg-secret
+                  key: password
+            # Storage entry s3.scw-eu-fr-v3 — env-var override mangling
+            # turns hyphens AND nesting into underscores.
+            - name: ENTE_S3_SCW_EU_FR_V3_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: cnd-france-scw-secret
+                  key: access-key-id
+            - name: ENTE_S3_SCW_EU_FR_V3_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: cnd-france-scw-secret
+                  key: secret-access-key
+            - name: ENTE_SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: brevo-smtp
+                  key: password
+            - name: ENTE_KEY_ENCRYPTION
+              valueFrom:
+                secretKeyRef:
+                  name: museum-secret
+                  key: key-encryption
+            - name: ENTE_KEY_HASH
+              valueFrom:
+                secretKeyRef:
+                  name: museum-secret
+                  key: key-hash
+            - name: ENTE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: museum-secret
+                  key: jwt-secret
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: config
+          configMap:
+            name: museum-config
+            items:
+              - key: museum.yaml
+                path: museum.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: museum
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: museum
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: museum
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: museum
+  namespace: cnd-photos
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # Photo uploads are large; same body-size cap as Baserow.
+    nginx.ingress.kubernetes.io/proxy-body-size: "100M"
+    nginx.ingress.kubernetes.io/client-body-buffer-size: "100M"
+spec:
+  ingressClassName: public
+  rules:
+    - host: api.photos.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: museum
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - api.photos.cloudnativedays.fr
+      secretName: museum-tls
