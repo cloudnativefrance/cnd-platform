@@ -191,7 +191,25 @@ All three Dockerfiles share the same structure. They differ only in:
 - which `yarn build:<app>` script is run
 - which `web/apps/<app>/out` directory is copied
 
-**Important note on env-var names:** The Ente web monorepo's exact `NEXT_PUBLIC_*` variable names have changed over time. At the pinned SHA, **read `web/apps/photos/.env.example`** (and the analogous files for albums + accounts) to confirm the variable spellings. The values below are best-effort based on the current upstream conventions; update if the example files diverge.
+**Important note on env-var names:** The Ente web monorepo's exact `NEXT_PUBLIC_*` variable names have changed over time. At the SHA pinned during initial implementation (`4e97df9e…`), the supported variables are documented in `web/apps/photos/.env` and `web/apps/albums/.env`:
+
+- `NEXT_PUBLIC_ENTE_ENDPOINT` — museum API URL
+- `NEXT_PUBLIC_ENTE_ALBUMS_ENDPOINT` — public-albums viewer URL
+- `NEXT_PUBLIC_ENTE_PHOTOS_ENDPOINT` — photos SPA URL (used by albums to hand off join/login flows back to photos)
+
+**`NEXT_PUBLIC_ENTE_ACCOUNTS_URL` is explicitly disallowed** at this SHA — `web/packages/base/next.config.base.js` hard-exits the build if it's set, with a message instructing to use `apps.accounts` in the museum configuration instead (which Task C6's `museum-config.yaml` already does). If at a future pinned SHA the env-var names have shifted again, re-run the pre-flight check below.
+
+**Pre-flight check at any new SHA:**
+
+```bash
+ENTE_SHA="$(cat ente-web.pin)"
+curl -fsSL "https://raw.githubusercontent.com/ente-io/ente/${ENTE_SHA}/web/package.json" \
+  | jq -r '.scripts | to_entries[] | select(.key | startswith("build")) | "\(.key): \(.value)"'
+# And check each app's .env for endpoint variable names:
+for app in photos albums accounts; do
+  curl -fsSL "https://raw.githubusercontent.com/ente-io/ente/${ENTE_SHA}/web/apps/${app}/.env"
+done
+```
 
 - [ ] **Step 1: Create `Dockerfile.photos`**
 
@@ -202,7 +220,7 @@ FROM node:22-alpine AS build
 ARG ENTE_SHA
 ARG MUSEUM_ENDPOINT=https://api.photos.cloudnativedays.fr
 ARG ALBUMS_ENDPOINT=https://albums.cloudnativedays.fr
-ARG ACCOUNTS_ENDPOINT=https://accounts.cloudnativedays.fr
+ARG PHOTOS_ENDPOINT=https://photos.cloudnativedays.fr
 
 RUN apk add --no-cache git python3 make g++
 
@@ -218,11 +236,13 @@ RUN corepack enable && corepack prepare yarn@1.22.22 --activate
 WORKDIR /src/web
 RUN yarn install --frozen-lockfile
 
-# Endpoint env vars baked at build time. Verify these names against
-# web/apps/photos/.env.example at the pinned SHA.
+# Endpoint env vars baked at build time. NEXT_PUBLIC_ENTE_ACCOUNTS_URL is
+# intentionally NOT set — it triggers a hard-exit in next.config.base.js
+# at this SHA. The accounts URL is configured server-side in museum.yaml
+# via apps.accounts (see Task C6).
 ENV NEXT_PUBLIC_ENTE_ENDPOINT=${MUSEUM_ENDPOINT}
 ENV NEXT_PUBLIC_ENTE_ALBUMS_ENDPOINT=${ALBUMS_ENDPOINT}
-ENV NEXT_PUBLIC_ENTE_ACCOUNTS_URL=${ACCOUNTS_ENDPOINT}
+ENV NEXT_PUBLIC_ENTE_PHOTOS_ENDPOINT=${PHOTOS_ENDPOINT}
 
 RUN yarn build:photos
 
