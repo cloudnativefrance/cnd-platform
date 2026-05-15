@@ -19,7 +19,7 @@ data:
   #     signed-up user. We sign up first as the bootstrap admin.
   museum.yaml: |
     apps:
-      public-albums: https://albums.cloudnativedays.fr
+      public-albums: https://photos.cloudnativedays.fr
       accounts:      https://accounts.photos.cloudnativedays.fr
 
     db:
