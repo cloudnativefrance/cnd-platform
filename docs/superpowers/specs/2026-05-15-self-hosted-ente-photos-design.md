@@ -4,6 +4,13 @@
 **Date:** 2026-05-15
 **Owner:** smana
 
+> **Location update (post-implementation):** the manifests moved from a
+> top-level `photos/` directory to `communication/photos/` for taxonomy —
+> ente photos sit under the broader "communication" surface alongside
+> matrix and mattermost. The Flux Kustomization `cnd-photos` stays
+> separate (own healthChecks, own reconcile loop). Read `./photos/`
+> references below as `./communication/photos/`.
+
 ## Why
 
 The CND France website currently links its 2026 edition gallery at

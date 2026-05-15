@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Bootstrap script for the self-hosted Ente photo platform.
-# Run from the repo root: ./photos/.bootstrap.sh
+# Run from the repo root: ./communication/photos/.bootstrap.sh
 #
 # Generates random secrets, reseals existing creds for the new namespace,
 # writes the 4 SealedSecret YAML files into photos/, and stashes the

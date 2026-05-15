@@ -6,7 +6,7 @@ metadata:
 spec:
   prune: true
   interval: 2m0s
-  path: ./photos
+  path: ./communication/photos
   dependsOn:
     - name: cnd-operators
   sourceRef:

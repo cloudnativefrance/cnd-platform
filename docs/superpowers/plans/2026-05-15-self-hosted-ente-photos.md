@@ -10,6 +10,14 @@
 
 **Reference spec:** `docs/superpowers/specs/2026-05-15-self-hosted-ente-photos-design.md` — read it first.
 
+> **Location update (post-implementation):** the manifests moved from
+> top-level `photos/` to `communication/photos/` after authoring, for
+> taxonomy. `cnd-communication`'s explicit `communication/kustomization.yaml`
+> lists only `matrix` and `mattermost` (excluding photos), so the
+> `cnd-photos` Flux Kustomization at `path: ./communication/photos` owns
+> reconciliation independently. When following the steps below, read
+> `./photos/` as `./communication/photos/`.
+
 **Two repos in scope:**
 - `cndfrance-website` (path: `/home/smana/Sources/cndfrance-website`) — image build pipeline
 - `cnd-platform` (path: `/home/smana/Sources/cnd-platform`) — manifests + Flux wiring + the cutover PR
