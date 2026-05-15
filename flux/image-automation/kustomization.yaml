@@ -3,3 +3,4 @@ kind: Kustomization
 
 resources:
   - website.yaml
+  - ente-web.yaml
