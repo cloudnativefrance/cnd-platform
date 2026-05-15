@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: museum-config
+  namespace: cnd-photos
+data:
+  # Verified against ente-io/ente@4e97df9e server/configurations/local.yaml.
+  # Schema notes captured at verification time:
+  #
+  #   - The S3 storage key MUST be one of museum's predefined names
+  #     (b2-eu-cen, wasabi-eu-central-2-v3, scw-eu-fr-v3, …). We use
+  #     scw-eu-fr-v3 even though our actual region is fr-par.
+  #   - Env-var overrides follow ENTE_<UPPER>_<UPPER>... with both nesting
+  #     dots AND hyphens replaced by underscores. So scw-eu-fr-v3.key →
+  #     ENTE_S3_SCW_EU_FR_V3_KEY.
+  #   - smtp.encryption defaults to none. We set it to "tls" for Brevo's
+  #     STARTTLS on port 587.
+  #   - internal.admins left unset — museum auto-promotes the first
+  #     signed-up user. We sign up first as the bootstrap admin.
+  museum.yaml: |
+    apps:
+      public-albums: https://albums.cloudnativedays.fr
+      accounts:      https://accounts.cloudnativedays.fr
+
+    db:
+      host: cnpg-ente-rw
+      port: 5432
+      name: ente_db
+      sslmode: disable
+      user: ente
+      # password ← env ENTE_DB_PASSWORD
+
+    s3:
+      hot_storage:
+        primary: scw-eu-fr-v3
+      scw-eu-fr-v3:
+        endpoint: s3.fr-par.scw.cloud
+        region: fr-par
+        bucket: cnd-ente-photos
+        # key/secret ← env ENTE_S3_SCW_EU_FR_V3_KEY / _SECRET
+
+    smtp:
+      host: smtp-relay.brevo.com
+      port: 587
+      username: 8f026a001@smtp-brevo.com
+      email: photos@cloudnativedays.fr
+      encryption: tls
+      # password ← env ENTE_SMTP_PASSWORD
+
+    webauthn:
+      rpid: photos.cloudnativedays.fr
+      rporigins:
+        - https://photos.cloudnativedays.fr
