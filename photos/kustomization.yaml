@@ -5,3 +5,12 @@ namespace: cnd-photos
 resources:
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
+  - cnpg-secret.yaml
+  - cnd-france-scw-secret.yaml
+  - brevo-smtp-secret.yaml
+  - museum-secret.yaml
+  - museum-config.yaml
+  - museum.yaml
+  - web-photos.yaml
+  - web-albums.yaml
+  - web-accounts.yaml
