@@ -3,7 +3,7 @@ kind: ScheduledBackup
 metadata:
   name: cnpg-ente
 spec:
-  schedule: "0 0 0 * * *"
+  schedule: "0 0 0 * * *" # At midnight every day
   backupOwnerReference: self
   cluster:
     name: cnpg-ente
