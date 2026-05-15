@@ -521,7 +521,7 @@ These are not git operations; they must complete before Phase C deploys, but the
   - `api.photos.cloudnativedays.fr`
   - `photos.cloudnativedays.fr`
   - `albums.cloudnativedays.fr`
-  - `accounts.cloudnativedays.fr`
+  - `accounts.photos.cloudnativedays.fr`
 
   Verify:
 
@@ -1000,7 +1000,7 @@ data:
 
     apps:
       public-albums: https://albums.cloudnativedays.fr
-      accounts:      https://accounts.cloudnativedays.fr
+      accounts:      https://accounts.photos.cloudnativedays.fr
 
     webauthn:
       rpid: photos.cloudnativedays.fr
@@ -1487,7 +1487,7 @@ Same copy-and-rename pattern as Task C9. Substitutions:
 | Old | New |
 |---|---|
 | `web-photos` | `web-accounts` |
-| `photos.cloudnativedays.fr` | `accounts.cloudnativedays.fr` |
+| `photos.cloudnativedays.fr` | `accounts.photos.cloudnativedays.fr` |
 | `ente-web-photos` (image + policy) | `ente-web-accounts` |
 | `web-photos-tls` | `web-accounts-tls` |
 
@@ -1509,7 +1509,7 @@ Image line:
 kustomize build photos/ | grep "host: accounts"
 ```
 
-Expected: `- host: accounts.cloudnativedays.fr` appears.
+Expected: `- host: accounts.photos.cloudnativedays.fr` appears.
 
 - [ ] **Step 4: Commit**
 
@@ -1517,7 +1517,7 @@ Expected: `- host: accounts.cloudnativedays.fr` appears.
 git add photos/web-accounts.yaml photos/kustomization.yaml
 git commit -m "feat(photos): web-accounts Deployment, Service, Ingress
 
-OTP-login SPA on accounts.cloudnativedays.fr. Required by photos and
+OTP-login SPA on accounts.photos.cloudnativedays.fr. Required by photos and
 albums SPAs to complete email-OTP authentication flows."
 ```
 
@@ -1771,7 +1771,7 @@ plan.
 - [ ] `kubectl -n cnd-photos get pods` shows museum + 2 cnpg + 3 web pods all `Running`
 - [ ] All 4 ingresses get certificates (`kubectl -n cnd-photos get certificate` → all `Ready`)
 - [ ] `curl -fsI https://api.photos.cloudnativedays.fr/ping` returns 200
-- [ ] Web UIs load without errors at photos./albums./accounts.cloudnativedays.fr
+- [ ] Web UIs load without errors at photos./albums./accounts.photos.cloudnativedays.fr
 EOF
 )"
 ```

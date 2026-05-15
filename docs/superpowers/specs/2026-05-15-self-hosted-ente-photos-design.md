@@ -169,7 +169,7 @@ smtp:
 
 apps:
   public-albums: https://albums.cloudnativedays.fr
-  accounts:      https://accounts.cloudnativedays.fr
+  accounts:      https://accounts.photos.cloudnativedays.fr
 
 webauthn:
   rpid: photos.cloudnativedays.fr
@@ -287,7 +287,7 @@ Performed once, in order, outside the Flux loop:
    - `api.photos.cloudnativedays.fr`
    - `photos.cloudnativedays.fr`
    - `albums.cloudnativedays.fr`
-   - `accounts.cloudnativedays.fr`
+   - `accounts.photos.cloudnativedays.fr`
 4. **Generate secret values** and seal them:
    ```bash
    openssl rand -base64 32   # key.encryption
