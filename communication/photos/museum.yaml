@@ -27,8 +27,7 @@ spec:
     spec:
       containers:
         - name: museum
-          # Pinned to the SHA tag corresponding to today's :latest. Bump
-          # by checking https://github.com/ente-io/ente/pkgs/container/server
+          # Image pinned to a SHA tag rather than :latest for reproducibility.
           image: ghcr.io/ente-io/server:449284a6a119a2275928d21987453f88fbde9565
           imagePullPolicy: IfNotPresent
           ports:
@@ -83,6 +82,7 @@ spec:
               cpu: 200m
               memory: 256Mi
             limits:
+              cpu: 500m
               memory: 512Mi
           livenessProbe:
             httpGet:

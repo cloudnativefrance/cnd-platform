@@ -20,6 +20,7 @@
 #      exists in the cluster — namespace usually kube-system).
 
 set -euo pipefail
+trap 'echo "ERROR: bootstrap failed at line $LINENO" >&2' ERR
 
 CTX="k8s-cndfrance-prod"
 NS="cnd-photos"
@@ -105,17 +106,20 @@ kubectl --context "${CTX}" create secret generic museum-secret \
 | kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/museum-secret.yaml"
 
 # ---------- Validate ----------
-echo "==> Verifying"
-ls -la "${PHOTOS_DIR}"/*-secret*.yaml "${PHOTOS_DIR}"/cnpg-secret.yaml "${PHOTOS_DIR}"/cnd-france-scw-secret.yaml "${PHOTOS_DIR}"/brevo-smtp-secret.yaml 2>/dev/null
-echo ""
-echo "==> kustomize build photos/ should now succeed:"
-( cd "$(dirname "${PHOTOS_DIR}")" && kustomize build photos/ | grep -c "^kind: SealedSecret" ) || true
+echo "==> Verifying secret files exist"
+for f in cnpg-secret.yaml cnd-france-scw-secret.yaml brevo-smtp-secret.yaml museum-secret.yaml; do
+  [[ -s "${PHOTOS_DIR}/${f}" ]] || { echo "ERROR: missing or empty ${PHOTOS_DIR}/${f}"; exit 1; }
+done
+
+echo "==> Validating kustomize build (expect 4 SealedSecrets)"
+sealed_count=$(cd "$(dirname "${PHOTOS_DIR}")" && kustomize build photos/ | grep -c "^kind: SealedSecret")
+[[ "${sealed_count}" -eq 4 ]] || { echo "ERROR: kustomize build produced ${sealed_count} SealedSecrets, expected 4"; exit 1; }
 
 echo ""
 echo "==> Plaintext backup at ${BACKUP_FILE} — MOVE to your password manager + DELETE the file."
 echo "==> Add and commit the 4 SealedSecret files:"
-echo "       git add photos/cnpg-secret.yaml \\"
-echo "               photos/cnd-france-scw-secret.yaml \\"
-echo "               photos/brevo-smtp-secret.yaml \\"
-echo "               photos/museum-secret.yaml"
+echo "       git add communication/photos/cnpg-secret.yaml \\"
+echo "               communication/photos/cnd-france-scw-secret.yaml \\"
+echo "               communication/photos/brevo-smtp-secret.yaml \\"
+echo "               communication/photos/museum-secret.yaml"
 echo "       git commit -m 'feat(photos): seal cluster + S3 + SMTP + museum secrets'"
