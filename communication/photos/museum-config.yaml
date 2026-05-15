@@ -32,7 +32,13 @@ data:
 
     s3:
       hot_storage:
+        # Both primary AND secondary must be set, else museum's config code
+        # falls through to its hardcoded defaults (b2-eu-cen / wasabi…) for
+        # which we have no creds — request fails with MissingRegion.
+        # Replication is disabled, so a single-DC setup uses the same name
+        # for both.
         primary: scw-eu-fr-v3
+        secondary: scw-eu-fr-v3
       scw-eu-fr-v3:
         endpoint: s3.fr-par.scw.cloud
         region: fr-par
