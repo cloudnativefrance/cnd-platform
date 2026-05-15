@@ -164,7 +164,7 @@ smtp:
   host: smtp-relay.brevo.com
   port: 587
   username: 8f026a001@smtp-brevo.com   # same Brevo account as Baserow
-  email: photos@cloudnativedays.fr     # From address; Workspace mailbox owns the identity
+  email: communication@cloudnativedays.fr  # existing Workspace alias
   # password ← env
 
 apps:
@@ -275,7 +275,10 @@ Performed once, in order, outside the Flux loop:
 1. **Scaleway** — create bucket `cnd-ente-photos` in `fr-par`. No lifecycle
    rule (blob deletion is Museum's GC responsibility, not S3's). Same access
    key as today applies.
-2. **Google Workspace** — create `photos@cloudnativedays.fr` as a user, alias,
+2. **Google Workspace** — reuse existing alias `communication@cloudnativedays.fr` as the OTP From address (no new mailbox needed). If you'd rather scope a dedicated mailbox per app later, swap it in via `smtp.email` and re-deploy.
+
+    Historical / superseded:
+    Original design proposed creating `photos@cloudnativedays.fr` as a user, alias,
    or group with delegate. Confirm Brevo SPF/DKIM records still cover
    `cloudnativedays.fr` (they do, since `baserow@cloudnativedays.fr` sends
    today).
@@ -390,7 +393,7 @@ rationale. Useful when revisiting in 12 months.
   level alongside Baserow and CNPG data. Same cost.
 - **Hostname layout `photos.* / albums.* / accounts.* / api.photos.*`:**
   Follows the existing `br.* / br-backend.*` style.
-- **SMTP via Brevo with `photos@cloudnativedays.fr` From address:** Brevo
+- **SMTP via Brevo with `communication@cloudnativedays.fr` From address:** Brevo
   stays the transport (already wired, zero extra setup); Workspace mailbox
   owns the From identity so replies/bounces land in a real human-readable
   inbox.

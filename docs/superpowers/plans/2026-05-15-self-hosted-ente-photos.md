@@ -515,7 +515,7 @@ These are not git operations; they must complete before Phase C deploys, but the
 
   Verify with: `scw object bucket get name=cnd-ente-photos region=fr-par`
 
-- [ ] **Workspace mailbox** — create `photos@cloudnativedays.fr` (user, alias, or group with delegate). Done via the Google Workspace Admin Console under Directory → Users (or Groups). Verify by sending a test email to it from a Gmail account.
+- [ ] **Workspace alias** — reuse existing `communication@cloudnativedays.fr` (no new mailbox to create). Verify by sending a test email from a Gmail account; replies/bounces from Brevo will land in the existing inbox.
 
 - [ ] **DNS** — add 4 A records (or CNAMEs to the cluster ingress hostname), all pointing at the same target as `br.cloudnativedays.fr`:
   - `api.photos.cloudnativedays.fr`
@@ -995,7 +995,7 @@ data:
       host: smtp-relay.brevo.com
       port: 587
       username: 8f026a001@smtp-brevo.com
-      email: photos@cloudnativedays.fr
+      email: communication@cloudnativedays.fr
       # password ← env
 
     apps:
