@@ -43,7 +43,9 @@ echo "==> Generating random secrets"
 PG_PASSWORD="$(openssl rand -base64 24 | tr -d '\n=' | tr '/+' '_-')"
 KEY_ENCRYPTION="$(openssl rand -base64 32)"
 KEY_HASH="$(openssl rand -base64 64 | tr -d '\n')"
-JWT_SECRET="$(openssl rand -base64 32)"
+# Museum decodes jwt.secret with b64.URLEncoding (not StdEncoding). Replace
+# +/ with -_ so the value is URL-safe base64. Padding (=) is kept.
+JWT_SECRET="$(openssl rand -base64 32 | tr '/+' '_-')"
 
 # ---------- Snapshot the plaintexts to a backup file the user MUST move ----------
 {
