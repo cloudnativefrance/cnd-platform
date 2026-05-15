@@ -1,4 +1,3 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +27,7 @@ spec:
     spec:
       containers:
         - name: web-photos
-          image: ghcr.io/cloudnativefrance/ente-web-photos:latest # {"$imagepolicy": "flux-system:cnd-ente-web-photos"}
+          image: ghcr.io/cloudnativefrance/ente-web-photos:main-2f61b2b-1778868207 # {"$imagepolicy": "flux-system:cnd-ente-web-photos"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -1,4 +1,3 @@
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,7 +27,7 @@ spec:
     spec:
       containers:
         - name: web-accounts
-          image: ghcr.io/cloudnativefrance/ente-web-accounts:latest # {"$imagepolicy": "flux-system:cnd-ente-web-accounts"}
+          image: ghcr.io/cloudnativefrance/ente-web-accounts:main-2f61b2b-1778868199 # {"$imagepolicy": "flux-system:cnd-ente-web-accounts"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
