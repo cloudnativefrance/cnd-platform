@@ -1,0 +1,107 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-accounts
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: web-accounts
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: ente
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: web-accounts
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-accounts
+        app.kubernetes.io/component: frontend
+        app.kubernetes.io/part-of: ente
+    spec:
+      containers:
+        - name: web-accounts
+          image: ghcr.io/cloudnativefrance/ente-web-accounts:latest # {"$imagepolicy": "flux-system:cnd-ente-web-accounts"}
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-accounts
+  namespace: cnd-photos
+  labels:
+    app.kubernetes.io/name: web-accounts
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: web-accounts
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-accounts
+  namespace: cnd-photos
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: public
+  rules:
+    - host: accounts.photos.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-accounts
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - accounts.photos.cloudnativedays.fr
+      secretName: web-accounts-tls

@@ -1,0 +1,99 @@
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cnd-ente-web-photos
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/ente-web-photos
+  interval: 30m
+---
+# Tag pattern requires the upstream cndfrance-website CI to publish images as
+# `main-<short-sha>-<unix-ts>` — Flux ImagePolicy cannot order bare git SHAs.
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cnd-ente-web-photos
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-ente-web-photos
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cnd-ente-web-albums
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/ente-web-albums
+  interval: 30m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cnd-ente-web-albums
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-ente-web-albums
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageRepository
+metadata:
+  name: cnd-ente-web-accounts
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/ente-web-accounts
+  interval: 30m
+---
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImagePolicy
+metadata:
+  name: cnd-ente-web-accounts
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-ente-web-accounts
+  filterTags:
+    pattern: '^main-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+# One ImageUpdateAutomation covers all three apps because they share the same
+# source repo, target path, and tag pattern. Flux scans ./photos for
+# `$imagepolicy` markers and updates each one against the matching ImagePolicy.
+apiVersion: image.toolkit.fluxcd.io/v1beta2
+kind: ImageUpdateAutomation
+metadata:
+  name: cnd-ente-web
+  namespace: flux-system
+spec:
+  interval: 30m
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  git:
+    commit:
+      author:
+        email: fluxcdbot@cloudnativedays.fr
+        name: fluxcdbot
+      messageTemplate: |
+        chore(photos): update image to {{range .Updated.Images}}{{println .}}{{end}}
+    push:
+      branch: main
+  update:
+    path: ./communication/photos
