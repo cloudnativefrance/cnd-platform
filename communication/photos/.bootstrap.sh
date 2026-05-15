@@ -105,6 +105,14 @@ kubectl --context "${CTX}" create secret generic museum-secret \
   --dry-run=client -o yaml \
 | kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/museum-secret.yaml"
 
+# ---------- Strip stale 'creationTimestamp: null' from all sealed files ----------
+# kubectl create --dry-run=client emits creationTimestamp: null, and kubeseal
+# passes it through into spec.template.metadata. The repo's kubeconform CI
+# rejects it (additionalProperties not allowed). Same fix as commit 27b235b.
+for f in cnpg-secret.yaml cnd-france-scw-secret.yaml brevo-smtp-secret.yaml museum-secret.yaml; do
+  sed -i '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' "${PHOTOS_DIR}/${f}"
+done
+
 # ---------- Validate ----------
 echo "==> Verifying secret files exist"
 for f in cnpg-secret.yaml cnd-france-scw-secret.yaml brevo-smtp-secret.yaml museum-secret.yaml; do
