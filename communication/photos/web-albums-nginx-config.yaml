@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-albums-nginx
+  namespace: cnd-photos
+data:
+  # Overrides the nginx.conf baked into ghcr.io/cloudnativefrance/ente-web-albums.
+  # The only functional addition vs the image's default is the `location = /`
+  # block that 302-redirects bare https://photos.cloudnativedays.fr/ to the
+  # current edition's featured public album. Real share links (/?t=...#...)
+  # are handled by the SPA route below it.
+  #
+  # Annual swap (2026 → 2027 → ...): edit the redirect URL on the `return 302`
+  # line, push, Flux applies, web-albums pod restarts. No image rebuild needed.
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+
+    events {
+      worker_connections 1024;
+    }
+
+    http {
+      include /etc/nginx/mime.types;
+      default_type application/octet-stream;
+      sendfile on;
+
+      server {
+        listen 8080;
+        server_name _;
+        root /usr/share/nginx/html;
+        index index.html;
+
+        gzip on;
+        gzip_min_length 1000;
+        gzip_proxied expired no-cache no-store private auth;
+        gzip_types text/plain text/css application/json application/javascript
+                   application/x-javascript text/xml application/xml
+                   application/xml+rss text/javascript image/svg+xml;
+
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff2?)$ {
+          expires 1y;
+          add_header Cache-Control "public, immutable";
+        }
+
+        # Featured-album redirect for bare https://photos.cloudnativedays.fr/
+        location = / {
+          if ($args = "") {
+            return 302 "https://photos.cloudnativedays.fr/?t=M73C5WAWSU#Gyj8P3y415A4GVkYwgq2sFeRFwzkhLujujoFyNmni8La";
+          }
+          try_files /index.html =404;
+        }
+
+        location / {
+          try_files $uri $uri/index.html /index.html;
+        }
+
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      }
+    }

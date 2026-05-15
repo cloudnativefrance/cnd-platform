@@ -11,5 +11,6 @@ resources:
   - museum-secret.yaml
   - museum-config.yaml
   - museum.yaml
+  - web-albums-nginx-config.yaml
   - web-albums.yaml
   - web-accounts.yaml
