@@ -68,7 +68,10 @@ SCW_SECRET_ACCESS_KEY=$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @b
 SCW_REGION=$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')
 
 BREVO_DATA=$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret brevo-smtp -o json)
-BREVO_PASSWORD=$(echo "$BREVO_DATA" | jq -r '.data."password" | @base64d')
+# cnd-project's brevo-smtp uses the key 'email-password' (not 'password').
+# Reading the wrong key silently yields an empty value and museum then fails
+# SMTP AUTH with 535. We rename it to 'password' below for the museum env-from.
+BREVO_PASSWORD=$(echo "$BREVO_DATA" | jq -r '.data."email-password" | @base64d')
 
 # ---------- Task C3: ente-cnpg-secret ----------
 echo "==> Sealing ente-cnpg-secret (Postgres credentials)"
