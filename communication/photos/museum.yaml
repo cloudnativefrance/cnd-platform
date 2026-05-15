@@ -28,7 +28,12 @@ spec:
       containers:
         - name: museum
           # Image pinned to a SHA tag rather than :latest for reproducibility.
-          image: ghcr.io/ente-io/server:449284a6a119a2275928d21987453f88fbde9565
+          # NOTE: ghcr.io/ente-io/server:latest is stale (points at a 2024-03-19
+          # commit that predates SMTP support in email.go). Pinning to a recent
+          # SHA published 2026-05-11; bump by checking the tag list at
+          # https://github.com/ente-io/ente/pkgs/container/server and verifying
+          # the underlying commit date.
+          image: ghcr.io/ente-io/server:98b31e167bc5098d530c1d36f994f1a098007ff8
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
