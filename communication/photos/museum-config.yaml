@@ -32,18 +32,24 @@ data:
 
     s3:
       hot_storage:
-        # Both primary AND secondary must be set, else museum's config code
-        # falls through to its hardcoded defaults (b2-eu-cen / wasabi…) for
-        # which we have no creds — request fails with MissingRegion.
-        # Replication is disabled, so a single-DC setup uses the same name
-        # for both.
-        primary: scw-eu-fr-v3
-        secondary: scw-eu-fr-v3
-      scw-eu-fr-v3:
+        # Ente has a HARDCODED check (repo/file.go markAsNeedingReplication):
+        # primary hot DC must be 'b2-eu-cen' (Backblaze) or
+        # 'wasabi-eu-central-2-v3' (Wasabi). Scaleway is upstream-defined as
+        # cold-only and POST /files fails with:
+        #   only B2 and Wasabi DCs can be used as the primary hot storage
+        # Workaround (community-standard for Scaleway-only self-hosters):
+        # use 'b2-eu-cen' as the storage entry name but point endpoint/region
+        # at Scaleway. Museum doesn't validate the endpoint is actually B2.
+        # Both primary AND secondary must be set, else the override is
+        # silently ignored (the if-condition requires both non-empty).
+        # Replication is disabled, so reusing the same name for both is fine.
+        primary: b2-eu-cen
+        secondary: b2-eu-cen
+      b2-eu-cen:
         endpoint: s3.fr-par.scw.cloud
         region: fr-par
         bucket: cnd-ente-photos
-        # key/secret ← env ENTE_S3_SCW_EU_FR_V3_KEY / _SECRET
+        # key/secret ← env ENTE_S3_B2_EU_CEN_KEY / _SECRET
 
     smtp:
       host: smtp-relay.brevo.com
