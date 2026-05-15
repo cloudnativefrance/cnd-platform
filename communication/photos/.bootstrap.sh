@@ -67,6 +67,33 @@ SCW_ACCESS_KEY_ID=$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @b
 SCW_SECRET_ACCESS_KEY=$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')
 SCW_REGION=$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')
 
+# ---------- Apply CORS to the Scaleway bucket ----------
+# Without a CORS policy the bucket rejects PUT requests from browser-style
+# clients (Ente Desktop is Electron/Chromium, which enforces CORS). Museum
+# presigns the URLs server-side but the desktop app then PUTs directly to
+# Scaleway from the browser context. NOT managed by Flux (S3 != K8s) — this
+# script is the GitOps record for the bucket setup.
+echo "==> Ensuring CORS policy on Scaleway bucket cnd-ente-photos"
+if command -v aws >/dev/null; then
+  AWS_ACCESS_KEY_ID="${SCW_ACCESS_KEY_ID}" \
+  AWS_SECRET_ACCESS_KEY="${SCW_SECRET_ACCESS_KEY}" \
+  AWS_DEFAULT_REGION="${SCW_REGION}" \
+    aws --endpoint-url "https://s3.${SCW_REGION}.scw.cloud" s3api put-bucket-cors \
+      --bucket cnd-ente-photos --cors-configuration '{
+        "CORSRules": [{
+          "AllowedOrigins": ["*"],
+          "AllowedMethods": ["GET","HEAD","PUT","POST","DELETE"],
+          "AllowedHeaders": ["*"],
+          "ExposeHeaders": ["ETag","Content-Length"],
+          "MaxAgeSeconds": 3000
+        }]
+      }' >/dev/null
+  echo "    CORS applied (allow-all origins; access still gated by short-lived presigned URLs)"
+else
+  echo "    SKIP: aws CLI not installed. Apply CORS manually via Scaleway console or:"
+  echo "          aws --endpoint-url https://s3.${SCW_REGION}.scw.cloud s3api put-bucket-cors --bucket cnd-ente-photos --cors-configuration '<json>'"
+fi
+
 BREVO_DATA=$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret brevo-smtp -o json)
 # cnd-project's brevo-smtp uses the key 'email-password' (not 'password').
 # Reading the wrong key silently yields an empty value and museum then fails
