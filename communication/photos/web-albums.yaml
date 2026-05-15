@@ -90,7 +90,7 @@ metadata:
 spec:
   ingressClassName: public
   rules:
-    - host: albums.cloudnativedays.fr
+    - host: photos.cloudnativedays.fr
       http:
         paths:
           - path: /
@@ -102,5 +102,5 @@ spec:
                   name: http
   tls:
     - hosts:
-        - albums.cloudnativedays.fr
+        - photos.cloudnativedays.fr
       secretName: web-albums-tls
