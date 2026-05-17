@@ -10,7 +10,7 @@ spec:
   image: ghcr.io/cloudnativefrance/ente-web-albums
   interval: 30m
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: cnd-ente-web-albums
@@ -34,7 +34,7 @@ spec:
   image: ghcr.io/cloudnativefrance/ente-web-accounts
   interval: 30m
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
   name: cnd-ente-web-accounts
