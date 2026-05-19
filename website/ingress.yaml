@@ -9,7 +9,17 @@ metadata:
 spec:
   ingressClassName: public
   rules:
-    - host: 2027.cloudnativedays.fr
+    - host: cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: website
+                port:
+                  name: http
+    - host: www.cloudnativedays.fr
       http:
         paths:
           - path: /
@@ -21,5 +31,6 @@ spec:
                   name: http
   tls:
     - hosts:
-        - 2027.cloudnativedays.fr
+        - cloudnativedays.fr
+        - www.cloudnativedays.fr
       secretName: website-tls
