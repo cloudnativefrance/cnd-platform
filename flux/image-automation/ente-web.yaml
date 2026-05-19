@@ -1,7 +1,7 @@
 ---
 # Tag pattern requires the upstream cndfrance-website CI to publish images as
 # `main-<short-sha>-<unix-ts>` — Flux ImagePolicy cannot order bare git SHAs.
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: cnd-ente-web-albums
@@ -25,7 +25,7 @@ spec:
     numerical:
       order: asc
 ---
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageRepository
 metadata:
   name: cnd-ente-web-accounts
