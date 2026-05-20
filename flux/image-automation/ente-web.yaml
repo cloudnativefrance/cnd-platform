@@ -52,7 +52,7 @@ spec:
 # One ImageUpdateAutomation covers all three apps because they share the same
 # source repo, target path, and tag pattern. Flux scans ./photos for
 # `$imagepolicy` markers and updates each one against the matching ImagePolicy.
-apiVersion: image.toolkit.fluxcd.io/v1beta2
+apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
   name: cnd-ente-web
