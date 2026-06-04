@@ -68,7 +68,7 @@ spec:
         email: fluxcdbot@cloudnativedays.fr
         name: fluxcdbot
       messageTemplate: |
-        chore(photos): update image to {{range .Changed.Images}}{{println .}}{{end}}
+        chore(photos): update image to {{range .Changed.Changes}}{{println .NewValue}}{{end}}
     push:
       branch: main
   update:
