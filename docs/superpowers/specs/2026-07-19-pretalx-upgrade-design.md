@@ -143,8 +143,11 @@ pretalx runs v2026.2.1. Record for the next upgrade:
   a pod restart was needed to load the new one (`kubectl delete pod pretalx-0`, or
   wait out the CrashLoopBackOff).
 
-### Fix this for next time
-On any future pretalx image bump, the static PVC will again be stale. Options:
-force a `rebuild` on rollout (init/lifecycle that removes or repopulates
-`/public/static`), or run the two manual steps above as part of the procedure.
-Add a maintenance-window banner — the single-replica StatefulSet has real downtime.
+### Fix this for next time — DONE
+A `collect-static` **initContainer** now runs `pretalx rebuild` into the shared
+`/public` PVC on every pod start, so the staticfiles manifest always matches the
+running image and the stale-static 500 cannot recur on a future image bump. It runs
+with minimal env (config mount + `PRETALX_FILESYSTEM_*`, `AUTOMIGRATE=no`) and 3Gi
+limit (rebuild OOMs under ~1Gi). Keep its image tag in sync with the app containers
+(Renovate bumps all three together). Trade-off: ~30s added to every pod start.
+Still: the single-replica StatefulSet has real downtime on rollout — announce a window.
