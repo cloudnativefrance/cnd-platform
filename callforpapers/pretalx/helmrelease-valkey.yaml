@@ -8,39 +8,55 @@ spec:
     mode: enabled
   chart:
     spec:
+      # Official Valkey project chart (upstream valkey/valkey image) — replaces the
+      # Bitnami chart, which is capped at 8.1.3 by the cluster move-to-bitnamilegacy
+      # policy. See docs/superpowers/specs/2026-07-19-pretalx-upgrade-design.md.
       chart: valkey
       sourceRef:
         kind: HelmRepository
-        name: bitnami
+        name: valkey
         namespace: flux-system
-      version: "3.0.22"
+      version: "0.10.0"
   interval: 10m0s
   install:
     remediation:
       retries: 3
+  upgrade:
+    remediation:
+      retries: 3
   values:
+    # Name the Service exactly as the app's connection URLs expect
+    # (redis://…@pretalx-valkey-primary:6379/N, stored in the pretalx-valkey
+    # SealedSecret) so no re-seal is needed on the migration.
+    fullnameOverride: pretalx-valkey-primary
+
+    # Single-instance cache / celery broker / session store — no HA.
+    # RWO node-local PVC → Recreate so the new pod isn't blocked mounting it.
+    deploymentStrategy: Recreate
+
     auth:
-      existingSecret: "pretalx-valkey"
-      existingSecretPasswordKey: "password"
-      usePasswordFiles: false
+      enabled: true
+      # Reuse the existing secret; the default user's password is under the
+      # "password" key (same key Bitnami used).
+      usersExistingSecret: pretalx-valkey
+      aclUsers:
+        default:
+          permissions: "~* &* +@all"
+          passwordKey: password
 
-    architecture: "standalone"
-
-    primary:
-      resourcesPreset: "nano"
-      persistence:
-        size: 2Gi
-        storageClass: "node-local-retain"
-
-    replica:
-      replicaCount: 1
-      resourcesPreset: "nano"
-
-      persistence:
-        size: 1Gi
-        storageClass: "node-local-retain"
+    dataStorage:
+      enabled: true
+      requestedSize: 2Gi
+      className: node-local-retain
 
     metrics:
       enabled: true
       serviceMonitor:
         enabled: true
+
+    resources:
+      requests:
+        memory: 128Mi
+        cpu: 100m
+      limits:
+        memory: 512Mi
