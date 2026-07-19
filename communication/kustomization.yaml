@@ -6,4 +6,3 @@ kind: Kustomization
 # Flux Kustomization (cnd-photos), not by cnd-communication.
 resources:
   - matrix
-  - mattermost
