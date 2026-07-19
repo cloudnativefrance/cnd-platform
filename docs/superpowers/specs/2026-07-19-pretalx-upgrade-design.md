@@ -104,3 +104,47 @@ Move pretalx from **v2025.1.0** to the latest **v2026.2.1**, and in the process
   migration (subscribe to Bitnami Secure Images, switch to `valkey/valkey` upstream
   image, or exempt valkey from the policy), tracked separately — not a version bump.
 - Baserow valkey, matrix-stack (#111), mattermost-operator (#106), baserow OOM (#105).
+
+## Actual rollout — incident & recovery (2026-07-19)
+
+The rollout was **not** clean. Two upstream/packaging bugs bit us in sequence; the
+site (HTTP 503) was down for ~25 min while diagnosing. Both are now fixed and
+pretalx runs v2026.2.1. Record for the next upgrade:
+
+### 1. Migration `0092_delete_soft_deleted_submissions` crashed
+- **Symptom:** boot `migrate` failed with
+  `psycopg2.errors.UndefinedTable: relation "submission_attendeesignup" does not exist`.
+- **Cause (pretalx bug):** the migration iterates the **live** model registry
+  (`django_apps.get_models()`) and `.count()`s every model with a Submission FK,
+  including core `AttendeeSignup` — whose table is only created later by `0106`.
+  Its `try/except` catches only `IntegrityError`, not the `ProgrammingError` that
+  fires. Only triggers when soft-deleted submissions exist (we had 20), which is
+  why upstream missed it. Migration is transactional → it rolled back, no data lost.
+- **Fix:** fake the (data-only, no-schema) migration, then apply the rest:
+  ```
+  kubectl exec -n cnd-callforpapers pretalx-0 -c pretalx -- python -m pretalx migrate submission 0092 --fake --noinput
+  kubectl exec -n cnd-callforpapers pretalx-0 -c pretalx -- python -m pretalx migrate --noinput
+  ```
+  Consequence: the 20 already-hidden `state=deleted` submissions are **not** purged
+  (identical to their pre-upgrade state). Purge later once upstream ships a fix.
+
+### 2. Stale static files → HTTP 500 on every page
+- **Symptom:** after migrations, `/` returned 500:
+  `ValueError: Missing staticfiles manifest entry for 'vendored/font-awesome.css'`.
+- **Cause:** `PRETALX_FILESYSTEM_STATIC=/public/static` is a **PVC** that already
+  held v2025.1.0 assets. The image entrypoint runs its auto-`rebuild` **only when
+  that dir is missing** (`[ ! -d "$PRETALX_FILESYSTEM_STATIC" ]`), so on an in-place
+  upgrade the stale manifest is kept and v2026 templates reference missing assets.
+- **Fix:** run `rebuild` in the **web** container (4Gi — the worker's 700Mi OOMs it):
+  ```
+  kubectl exec -n cnd-callforpapers pretalx-0 -c pretalx -- python -m pretalx rebuild
+  ```
+  Then the running gunicorn workers still had the old manifest cached in memory →
+  a pod restart was needed to load the new one (`kubectl delete pod pretalx-0`, or
+  wait out the CrashLoopBackOff).
+
+### Fix this for next time
+On any future pretalx image bump, the static PVC will again be stale. Options:
+force a `rebuild` on rollout (init/lifecycle that removes or repopulates
+`/public/static`), or run the two manual steps above as part of the procedure.
+Add a maintenance-window banner — the single-replica StatefulSet has real downtime.
