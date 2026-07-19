@@ -13,6 +13,37 @@ spec:
       labels:
         app: pretalx
     spec:
+      initContainers:
+        # Regenerate static assets into the shared /public PVC on every start so the
+        # staticfiles manifest always matches the running image. The standalone
+        # entrypoint only auto-rebuilds when the static dir is MISSING, so an in-place
+        # image bump otherwise keeps stale assets and every page 500s
+        # (see docs/superpowers/specs/2026-07-19-pretalx-upgrade-design.md).
+        # Keep this image tag in sync with the containers below (Renovate bumps all).
+        - name: collect-static
+          image: pretalx/standalone:v2026.2.1
+          args: ["rebuild"]
+          env:
+            - name: PRETALX_FILESYSTEM_MEDIA
+              value: /public/media
+            - name: PRETALX_FILESYSTEM_STATIC
+              value: /public/static
+            - name: AUTOMIGRATE
+              value: "no"
+            - name: AUTOREBUILD
+              value: "no"
+          volumeMounts:
+            - name: pretalx-public
+              mountPath: /public
+            - name: pretalx-config
+              mountPath: /etc/pretalx/pretalx.cfg
+              subPath: pretalx.cfg
+          resources:
+            requests:
+              memory: 256Mi
+              cpu: 200m
+            limits:
+              memory: 3Gi
       containers:
         - name: pretalx
           image: pretalx/standalone:v2026.2.1
