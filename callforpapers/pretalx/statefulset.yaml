@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: pretalx
-          image: smana/pretalx:v2025.1.0-cndfr-1
+          image: pretalx/standalone:v2026.2.1
           ports:
             - containerPort: 8080
           env:
@@ -101,7 +101,7 @@ spec:
             limits:
               memory: 4Gi
         - name: pretalx-worker
-          image: pretalx/standalone:v2025.1.0
+          image: pretalx/standalone:v2026.2.1
           command:
             ["celery", "-A", "pretalx.celery_app", "worker", "-l", "info"]
           resources:
@@ -154,7 +154,7 @@ spec:
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
         - name: nginx-statics
-          image: nginx:1.29-alpine
+          image: nginx:1.31-alpine
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8081
