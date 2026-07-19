@@ -14,14 +14,6 @@ spec:
     kind: GitRepository
     name: customer
   healthChecks:
-    - apiVersion: installation.mattermost.com/v1beta1
-      kind: Mattermost
-      name: cnd-france
-      namespace: cnd-communication
-    - apiVersion: postgresql.cnpg.io/v1
-      kind: Cluster
-      name: cnpg-mattermost
-      namespace: cnd-communication
     - apiVersion: helm.toolkit.fluxcd.io/v2
       kind: HelmRelease
       name: matrix-stack

@@ -6,5 +6,4 @@ resources:
   - helmrepo-christianhuth.yaml
   - helmrepo-cloudnative-pg.yaml
   - helmrepo-ess.yaml
-  - helmrepo-mattermost.yaml
   - helmrepo-valkey.yaml

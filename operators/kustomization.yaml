@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# No operators currently managed here. The mattermost-operator was removed with
+# the mattermost decommission (2026-07). This empty kustomization keeps the
+# ./operators path valid for the cnd-operators Flux Kustomization (which other
+# Kustomizations dependsOn), so Flux prunes the operator instead of erroring on a
+# missing path.
+resources: []
