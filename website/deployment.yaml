@@ -30,7 +30,7 @@ spec:
         fsGroup: 0
       containers:
         - name: website
-          image: ghcr.io/cloudnativefrance/website:main-fada320-1784992264 # {"$imagepolicy": "flux-system:cnd-website"}
+          image: ghcr.io/cloudnativefrance/website:main-33b7c7e-1784997490 # {"$imagepolicy": "flux-system:cnd-website"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
