@@ -682,13 +682,35 @@ git checkout -b staging
 git push -u origin staging
 ```
 
-- [ ] **Step 4: Wait for the first staging image**
+- [ ] **Step 4: Trigger the first staging build manually**
+
+**Do not rely on the push in step 3 to fire the workflow.** `on.push` carries both
+`branches:` and a `paths:` filter, and the two are ANDed. Creating `staging` from `main`
+introduces no new commits, so the push event has an empty changed-file set and the `paths:`
+filter has nothing to match — the run is very likely skipped. This was flagged in review and
+corroborated against GitHub's documented diff behaviour for new-branch pushes, but it is not
+authoritatively specified, so treat the manual dispatch as the reliable path rather than a
+fallback:
+
+```bash
+gh workflow run build-image.yml --ref staging
+```
+
+`workflow_dispatch` bypasses `paths:` entirely, and `github.ref_name` still resolves to
+`staging`, so the tag rule produces `staging-<sha>-<ts>` exactly as a push would.
+
+Then wait for it:
 
 ```bash
 gh run watch "$(gh run list --branch staging --workflow build-image.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
 ```
 
 Expected: `✓ Build and Push Container Image`
+
+Subsequent pushes to `staging` that touch `src/**`, `public/**`, `package.json`,
+`pnpm-lock.yaml`, `astro.config.mjs`, `Dockerfile` or `nginx/**` do fire automatically — the
+filter only bites on the zero-commit branch creation. A push touching only, say, a README
+will not rebuild; use `workflow_dispatch` for those.
 
 - [ ] **Step 5: Capture the exact tag — Task 6 needs it**
 
