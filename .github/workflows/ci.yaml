@@ -22,3 +22,27 @@ jobs:
           verb: call
           module: github.com/Smana/daggerverse/kubeconform@kubeconform/v0.1.5
           args: validate --manifests "." --exclude ".github/*" --kustomize --catalog
+
+  manifest-policy:
+    name: Manifest policy 🛃
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Pinned: an unpinned install floats to whatever upstream released, which
+      # would let a new default check turn this job red without a repo change.
+      - name: Install Polaris
+        uses: fairwindsops/polaris/.github/actions/setup-polaris@v10.2.1
+        with:
+          version: '8.5.0'
+
+      - name: Install kustomize
+        run: |
+          curl -sS "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
+            | bash -s 5.7.1 /usr/local/bin
+
+      # Same entry point humans run locally, so "it validates" is reproducible
+      # rather than a CI-only claim.
+      - name: Validate manifests (polaris)
+        run: ./scripts/validate-manifests.sh
