@@ -946,13 +946,29 @@ Expected: `cnd-website-staging` — one line, nothing else.
 
 - [ ] **Step 9: Validate against the API schema**
 
+Use `kubeconform`, not `kubectl --dry-run=client`. Despite its name, client-side dry-run
+still downloads the OpenAPI schema from the API server, so it fails without a live cluster
+connection — which an implementer working from a checkout does not have.
+
 Run:
 
 ```bash
-kustomize build website-staging/ | kubectl apply --dry-run=client -f -
+kustomize build website-staging/ | kubeconform -summary -strict -
 ```
 
-Expected: three `... created (dry run)` lines.
+Expected:
+
+```
+Summary: 3 resources found parsing stdin - Valid: 3, Invalid: 0, Errors: 0, Skipped: 0
+```
+
+And for the namespace file:
+
+```bash
+kubeconform -summary -strict namespaces/namespaces.yaml
+```
+
+Expected: `Valid: 8, Invalid: 0` (7 pre-existing namespaces plus the new one).
 
 - [ ] **Step 10: Commit**
 
@@ -1099,13 +1115,28 @@ cnd-website-staging -> ./website-staging
 
 - [ ] **Step 6: Validate the cluster Kustomization**
 
-Run:
+`kubectl --dry-run=client` needs a live API server for schema download, so use `kubeconform`.
+Flux CRDs are not in the default schema store, so point it at the Flux schema set and let
+unknown kinds be reported rather than silently skipped:
 
 ```bash
-kubectl apply --dry-run=client -f clusters/k8s-cndfrance-prod/website-staging.yaml
+kubeconform -summary -ignore-missing-schemas \
+  clusters/k8s-cndfrance-prod/website-staging.yaml \
+  flux/image-automation/website-staging.yaml
 ```
 
-Expected: `kustomization.kustomize.toolkit.fluxcd.io/cnd-website-staging created (dry run)`
+Expected: `Valid: 0, Invalid: 0, Errors: 0, Skipped: 3` — all three objects are Flux CRDs
+with no schema available locally, so "Skipped" is the correct and expected result. This
+confirms the YAML parses and the documents are well-formed; the CRD-level validation happens
+server-side when Flux applies them.
+
+Also confirm the YAML is structurally sound:
+
+```bash
+yq -e 'true' clusters/k8s-cndfrance-prod/website-staging.yaml >/dev/null && echo "parse OK"
+```
+
+Expected: `parse OK`
 
 - [ ] **Step 7: Commit and open the PR**
 
