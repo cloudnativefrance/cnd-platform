@@ -22,3 +22,36 @@ jobs:
           verb: call
           module: github.com/Smana/daggerverse/kubeconform@kubeconform/v0.1.5
           args: validate --manifests "." --exclude ".github/*" --kustomize --catalog
+
+  manifest-policy:
+    name: Manifest policy 🛃
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # Installed from the GitHub release rather than the official action: that
+      # action is a Docker action which builds from alpine at runtime, so the
+      # gate went red the first time Docker Hub was unreachable from the runner.
+      # Pinned to the version validated locally, so CI and a laptop agree.
+      - name: Install Polaris
+        run: |
+          curl -sSL "https://github.com/FairwindsOps/polaris/releases/download/v10.2.1/polaris_10.2.1_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin polaris
+          polaris version
+
+      # Into a private dir, not /usr/local/bin: the runner image already ships a
+      # kustomize there and the installer refuses to overwrite it. Prepending
+      # our own keeps the version pinned rather than inheriting the image's.
+      - name: Install kustomize
+        run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
+          curl -sS "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
+            | bash -s 5.7.1 "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/kustomize" version
+
+      # Same entry point humans run locally, so "it validates" is reproducible
+      # rather than a CI-only claim.
+      - name: Validate manifests (polaris)
+        run: ./scripts/validate-manifests.sh
