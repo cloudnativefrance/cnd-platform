@@ -40,10 +40,16 @@ jobs:
             | tar -xz -C /usr/local/bin polaris
           polaris version
 
+      # Into a private dir, not /usr/local/bin: the runner image already ships a
+      # kustomize there and the installer refuses to overwrite it. Prepending
+      # our own keeps the version pinned rather than inheriting the image's.
       - name: Install kustomize
         run: |
+          mkdir -p "${RUNNER_TEMP}/bin"
           curl -sS "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" \
-            | bash -s 5.7.1 /usr/local/bin
+            | bash -s 5.7.1 "${RUNNER_TEMP}/bin"
+          echo "${RUNNER_TEMP}/bin" >> "${GITHUB_PATH}"
+          "${RUNNER_TEMP}/bin/kustomize" version
 
       # Same entry point humans run locally, so "it validates" is reproducible
       # rather than a CI-only claim.
