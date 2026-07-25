@@ -3,4 +3,5 @@ kind: Kustomization
 
 resources:
   - website.yaml
+  - website-staging.yaml
   - ente-web.yaml

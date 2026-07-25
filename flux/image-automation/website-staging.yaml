@@ -1,0 +1,42 @@
+---
+# The ImageRepository cnd-website (see website.yaml) is reused as-is: staging
+# pulls from the same GHCR repository, so a second scan would be wasted work.
+# Only the policy and the write-back automation are specific to staging.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImagePolicy
+metadata:
+  name: cnd-website-staging
+  namespace: flux-system
+spec:
+  imageRepositoryRef:
+    name: cnd-website
+  filterTags:
+    pattern: '^staging-[a-f0-9]+-(?P<ts>[0-9]+)$'
+    extract: '$ts'
+  policy:
+    numerical:
+      order: asc
+---
+# A separate automation is mandatory. The production one targets ./website; if
+# it were reused it would rewrite the production manifest with a staging tag.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageUpdateAutomation
+metadata:
+  name: cnd-website-staging
+  namespace: flux-system
+spec:
+  interval: 30m
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  git:
+    commit:
+      author:
+        email: fluxcdbot@cloudnativedays.fr
+        name: fluxcdbot
+      messageTemplate: |
+        chore(website-staging): update image to {{range .Changed.Changes}}{{println .NewValue}}{{end}}
+    push:
+      branch: main
+  update:
+    path: ./website-staging
