@@ -37,7 +37,7 @@ spec:
           # ImageUpdateAutomation once the website repo's `staging` branch
           # publishes its first staging-<sha>-<ts> image. Until then this
           # pod stays in ImagePullBackOff on purpose.
-          image: ghcr.io/cloudnativefrance/website:staging-775aa2f-1784991175 # {"$imagepolicy": "flux-system:cnd-website-staging"}
+          image: ghcr.io/cloudnativefrance/website:staging-33b7c7e-1784997564 # {"$imagepolicy": "flux-system:cnd-website-staging"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
