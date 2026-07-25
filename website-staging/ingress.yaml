@@ -1,7 +1,9 @@
 ---
-# Basic auth is deliberately absent here. cert-manager must complete its
-# HTTP-01 challenge before the gate goes up; the auth annotations are added in
-# a follow-up commit once website-staging-tls is Ready.
+# Basic auth is deliberately absent here: the SealedSecret it would reference
+# doesn't exist yet (sealing it requires cluster access, which is the
+# operator's step). ingress-nginx returns 503 when auth-secret names a Secret
+# that isn't there, so the annotations are added in a follow-up commit once
+# the secret is sealed and applied.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:

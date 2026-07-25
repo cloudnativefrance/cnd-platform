@@ -31,10 +31,12 @@ spec:
         fsGroup: 0
       containers:
         - name: website
-          # Sentinel tag: this image does not exist on purpose. Flux owns this
-          # field; the ImageUpdateAutomation from Task 7 rewrites it on first
-          # reconcile. Until then, a failed pull is louder than serving the
-          # wrong content.
+          # Sentinel tag: deliberately does not exist in the registry, so
+          # this pod fails loudly with ImagePullBackOff rather than silently
+          # serving the wrong content. Rewritten by the cnd-website-staging
+          # ImageUpdateAutomation once the website repo's `staging` branch
+          # publishes its first staging-<sha>-<ts> image. Until then this
+          # pod stays in ImagePullBackOff on purpose.
           image: ghcr.io/cloudnativefrance/website:staging-0000000-0000000000 # {"$imagepolicy": "flux-system:cnd-website-staging"}
           imagePullPolicy: IfNotPresent
           ports:

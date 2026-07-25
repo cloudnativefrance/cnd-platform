@@ -2,6 +2,12 @@
 # The ImageRepository cnd-website (see website.yaml) is reused as-is: staging
 # pulls from the same GHCR repository, so a second scan would be wasted work.
 # Only the policy and the write-back automation are specific to staging.
+#
+# Tag pattern requires the upstream website CI to publish images as
+# `staging-<short-sha>-<unix-ts>` — Flux ImagePolicy cannot order bare git
+# SHAs. This contract is not yet honoured upstream (no `staging` branch
+# exists there yet), which is why the shipped Deployment carries a sentinel
+# tag rather than a real one.
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
