@@ -42,7 +42,19 @@ spec:
         name: fluxcdbot
       messageTemplate: |
         chore(website): update image to {{range .Changed.Changes}}{{println .NewValue}}{{end}}
+    # Production is NOT auto-deployed. The automation writes the image bump to a
+    # promotion branch instead of main, so shipping to production is an explicit,
+    # reviewable merge rather than a side effect of merging a feature.
+    #
+    # Flux creates promote/website from main when it does not exist, so delete
+    # the branch after merging its PR and the next run recreates it cleanly.
+    #
+    # Two properties this buys back, both of which cost us today:
+    #   - a change reaches attendees only when a human decides it should;
+    #   - git owns the image field again, so `git revert` actually reverts —
+    #     with automation pushing to main, the controller overwrites any manual
+    #     edit on its next 30m run.
     push:
-      branch: main
+      branch: promote/website
   update:
     path: ./website
