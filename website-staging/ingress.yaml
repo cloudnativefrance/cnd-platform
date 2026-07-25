@@ -1,0 +1,28 @@
+---
+# Basic auth is deliberately absent here. cert-manager must complete its
+# HTTP-01 challenge before the gate goes up; the auth annotations are added in
+# a follow-up commit once website-staging-tls is Ready.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: website
+  namespace: cnd-website-staging
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: public
+  rules:
+    - host: staging.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: website
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - staging.cloudnativedays.fr
+      secretName: website-staging-tls
