@@ -4,7 +4,7 @@
 
 **Goal:** Serve a distinct build of the conference website at `https://staging.cloudnativedays.fr`, fed continuously from a dedicated `staging` branch, gated behind basic auth and excluded from search indexes.
 
-**Architecture:** Two repositories. `cndfrance-website` gains a second image-tag channel (`staging-<sha>-<ts>`), an origin driven by `PUBLIC_SITE_URL` instead of a hardcoded constant, and a generated `robots.txt`. `cnd-platform` gains a `website-staging/` kustomization with its own Flux `ImagePolicy` and `ImageUpdateAutomation` writing to a separate path, plus an ingress-nginx basic-auth gate added *after* the TLS certificate has issued.
+**Architecture:** Two repositories. `cndfrance-website` gains a second image-tag channel (`staging-<sha>-<ts>`), an origin driven by `PUBLIC_SITE_URL` instead of a hardcoded constant, and a generated `robots.txt`. `cnd-platform` gains a `website-staging/` kustomization with its own Flux `ImagePolicy` and `ImageUpdateAutomation` writing to a separate path, plus an ingress-nginx basic-auth gate sealed and landed *before* the DNS record is created — so staging is never publicly reachable without auth — with the TLS certificate issuing afterward via cert-manager's HTTP-01 solver, which does not inherit the auth annotations.
 
 **Tech Stack:** Astro 5 (fully static, no adapter), Vitest 4, GitHub Actions + `docker/metadata-action@v5`, Flux CD v2.8 image automation, Kustomize, ingress-nginx, cert-manager, Bitnami SealedSecrets.
 
@@ -739,10 +739,10 @@ Record it. If the command returns nothing, read the "Extract metadata" step's ou
 - Create: `website-staging/ingress.yaml`
 
 **Interfaces:**
-- Consumes: the image tag captured in Task 5, step 5.
-- Produces: a Deployment named `website` in namespace `cnd-website-staging`, carrying the marker `# {"$imagepolicy": "flux-system:cnd-website-staging"}`, which Task 7's `ImageUpdateAutomation` rewrites.
+- Consumes: nothing from Task 5. The manifest ships with the sentinel tag `staging-0000000-0000000000`, which does not exist in GHCR. Task 5 (cutting the `staging` branch and capturing its first real tag) may be deferred; this task does not block on it.
+- Produces: a Deployment named `website` in namespace `cnd-website-staging`, carrying the marker `# {"$imagepolicy": "flux-system:cnd-website-staging"}`, which Task 7's `ImageUpdateAutomation` rewrites once the website repo's `staging` branch publishes its first `staging-<sha>-<ts>` image. Until then the pod stays in `ImagePullBackOff` on purpose — a loud, correct failure mode, not an outage.
 
-The Ingress is created **without** basic-auth annotations. cert-manager must complete its HTTP-01 challenge first; the auth gate is added in Task 8. This ordering is the mitigation recorded in the spec's risk table.
+The Ingress is created **without** basic-auth annotations: the SealedSecret they would reference doesn't exist yet (sealing it requires cluster access, deferred to the operator in Task 8), and ingress-nginx returns 503 when `auth-secret` names a Secret that isn't there. Task 8 seals the secret and adds the annotations — sequenced before the DNS record is created, so staging is never publicly reachable without auth.
 
 - [ ] **Step 1: Create the branch**
 
@@ -779,7 +779,14 @@ resources:
 
 - [ ] **Step 4: Create `website-staging/deployment.yaml`**
 
-Replace `staging-REPLACE-ME` with the tag captured in Task 5, step 5.
+Use the sentinel tag `staging-0000000-0000000000`. It does not exist in GHCR
+on purpose: Task 5 (cutting the `staging` branch upstream) is the operator's
+to run, and may not have happened yet by the time this manifest is committed.
+Committing a placeholder that requires Task 5's exact output would make this
+task depend on operator timing for no benefit. The pod fails loudly with
+`ImagePullBackOff` until the `cnd-website-staging` ImageUpdateAutomation
+rewrites this field for real, once the upstream `staging` branch publishes
+its first image.
 
 ```yaml
 apiVersion: apps/v1
@@ -815,7 +822,13 @@ spec:
         fsGroup: 0
       containers:
         - name: website
-          image: ghcr.io/cloudnativefrance/website:staging-REPLACE-ME # {"$imagepolicy": "flux-system:cnd-website-staging"}
+          # Sentinel tag: deliberately does not exist in the registry, so
+          # this pod fails loudly with ImagePullBackOff rather than silently
+          # serving the wrong content. Rewritten by the cnd-website-staging
+          # ImageUpdateAutomation once the website repo's `staging` branch
+          # publishes its first staging-<sha>-<ts> image. Until then this
+          # pod stays in ImagePullBackOff on purpose.
+          image: ghcr.io/cloudnativefrance/website:staging-0000000-0000000000 # {"$imagepolicy": "flux-system:cnd-website-staging"}
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -887,9 +900,11 @@ spec:
 
 ```yaml
 ---
-# Basic auth is deliberately absent here. cert-manager must complete its
-# HTTP-01 challenge before the gate goes up; the auth annotations are added in
-# a follow-up commit once website-staging-tls is Ready.
+# Basic auth is deliberately absent here: the SealedSecret it would reference
+# doesn't exist yet (sealing it requires cluster access, which is the
+# operator's step). ingress-nginx returns 503 when auth-secret names a Secret
+# that isn't there, so the annotations are added in a follow-up commit once
+# the secret is sealed and applied.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -981,8 +996,10 @@ replica instead of two and the staging host. Resources, probes and
 securityContext are carried over unchanged so staging exercises the same
 runtime shape as production.
 
-The Ingress ships without basic auth on purpose: cert-manager needs to complete
-its HTTP-01 challenge before the gate goes up."
+The Ingress ships without basic auth on purpose: the SealedSecret it would
+reference doesn't exist yet. Task 8 seals it and lands the auth annotations,
+sequenced before the DNS record so staging is never publicly reachable
+without auth."
 ```
 
 ---
@@ -1155,14 +1172,25 @@ git push -u origin feat/website-staging
 gh pr create --base main \
   --title "Add the website staging environment" \
   --body "Deploys a second website instance at staging.cloudnativedays.fr, fed by the
-\`staging\` branch of cloudnativefrance/cndfrance-website.
+\`staging\` branch of cloudnativefrance/website.
 
 - new namespace \`cnd-website-staging\`
 - \`website-staging/\` kustomization: 1 replica, staging host
 - Flux ImagePolicy on \`staging-<sha>-<ts>\` plus a separate ImageUpdateAutomation on \`./website-staging\`
+- Deployment ships with a sentinel image tag (\`staging-0000000-0000000000\`, does not exist in GHCR) — expect \`ImagePullBackOff\` until it's rewritten; see below
 
-Requires the companion change in cndfrance-website (merged) and two manual
-steps after merge: the DNS record and the basic-auth SealedSecret.
+The companion change in cloudnativefrance/website (CI staging channel,
+configurable \`site\`, generated robots.txt) is **pending**, not merged — that
+branch is still local. Two operator tasks from the plan remain outstanding
+and are tracked here for visibility, not done by this PR:
+
+- **Task 5** — cut the \`staging\` branch in cloudnativefrance/website so CI
+  publishes the first real \`staging-<sha>-<ts>\` image. Until this happens the
+  Deployment's sentinel tag intentionally fails to pull.
+- **Task 8** — DNS record, basic-auth SealedSecret, and the ingress
+  \`auth-*\` annotations. Sealing the secret and landing the annotations is
+  sequenced *before* the DNS record is created, so staging is never
+  publicly reachable without auth.
 
 Design: \`docs/superpowers/specs/2026-07-25-website-staging-design.md\`"
 ```
@@ -1178,63 +1206,24 @@ Design: \`docs/superpowers/specs/2026-07-25-website-staging-design.md\`"
 - Modify: `website-staging/ingress.yaml`
 
 **Interfaces:**
-- Consumes: the deployed Ingress from Task 6 and a resolving DNS record.
+- Consumes: the deployed Ingress from Task 6. A resolving DNS record is needed only later in this task, for certificate issuance (step 7) — not up front.
 - Produces: a `SealedSecret` named `website-staging-auth` with data key `auth`.
 
 This task requires cluster access and a DNS change. It is the operator's, not an agent's.
 
-- [ ] **Step 1: Create the DNS record**
+Sealing the secret and landing the auth gate (steps 1-5) come **before** the
+DNS record (step 6) is created. `kubeseal` binds a SealedSecret to a
+namespace/name string, not to any live cluster object, so nothing in steps
+1-5 needs DNS or a publicly reachable Ingress. And cert-manager's HTTP-01
+solver uses a separate, more-specific Ingress for
+`/.well-known/acme-challenge/` that does not inherit the `auth-*`
+annotations, so raising the gate early does not block certificate issuance
+(see the spec's risk table). This ordering closes what would otherwise be a
+publicly-reachable, unauthenticated window between the DNS record resolving
+and the gate landing — staging may show unannounced content (schedule,
+speakers, pricing), and `robots.txt`/`noindex` only stop indexing, not access.
 
-`staging.cloudnativedays.fr` → the same address `cloudnativedays.fr` resolves to.
-
-Verify:
-
-```bash
-dig +short staging.cloudnativedays.fr
-dig +short cloudnativedays.fr
-```
-
-Expected: identical output.
-
-- [ ] **Step 2: Confirm Flux has reconciled both kustomizations**
-
-```bash
-flux get kustomizations cnd-website-staging
-flux get images policy cnd-website-staging
-```
-
-Expected: `Ready: True` for the kustomization, and a `LatestImage` ending in a `staging-…` tag for the policy.
-
-- [ ] **Step 3: Wait for the certificate**
-
-```bash
-kubectl -n cnd-website-staging get certificate website-staging-tls -w
-```
-
-Expected: `READY  True`. If it stays `False` for more than a few minutes:
-
-```bash
-kubectl -n cnd-website-staging describe certificate website-staging-tls
-kubectl -n cnd-website-staging get challenges
-```
-
-- [ ] **Step 4: Confirm the site serves before locking it**
-
-```bash
-curl -sI https://staging.cloudnativedays.fr | head -1
-curl -s https://staging.cloudnativedays.fr/robots.txt
-```
-
-Expected: `HTTP/2 200`, then:
-
-```
-User-agent: *
-Disallow: /
-```
-
-If robots.txt shows `Allow: /`, the image was built without the `PUBLIC_SITE_URL` build arg — stop and fix Task 4 before continuing.
-
-- [ ] **Step 5: Seal the basic-auth secret**
+- [ ] **Step 1: Seal the basic-auth secret**
 
 ```bash
 cd /home/smana/Sources/cnd-platform
@@ -1252,8 +1241,10 @@ rm -f /tmp/auth
 ```
 
 The data key must be exactly `auth`; ingress-nginx looks for no other name.
+The namespace already exists (Task 6), so this works whether or not DNS or a
+certificate exist yet.
 
-- [ ] **Step 6: Verify nothing unsealed leaked into the file**
+- [ ] **Step 2: Verify nothing unsealed leaked into the file**
 
 ```bash
 yq -r '.kind' website-staging/auth-sealedsecret.yaml
@@ -1262,7 +1253,7 @@ grep -c 'stringData\|^data:' website-staging/auth-sealedsecret.yaml || echo "0 (
 
 Expected: `SealedSecret`, then `0 (expected)`.
 
-- [ ] **Step 7: Register the secret and raise the gate**
+- [ ] **Step 3: Register the secret and raise the gate**
 
 `website-staging/kustomization.yaml`:
 
@@ -1277,9 +1268,11 @@ Expected: `SealedSecret`, then `0 (expected)`.
 `website-staging/ingress.yaml`:
 
 ```diff
--# Basic auth is deliberately absent here. cert-manager must complete its
--# HTTP-01 challenge before the gate goes up; the auth annotations are added in
--# a follow-up commit once website-staging-tls is Ready.
+-# Basic auth is deliberately absent here: the SealedSecret it would reference
+-# doesn't exist yet (sealing it requires cluster access, which is the
+-# operator's step). ingress-nginx returns 503 when auth-secret names a Secret
+-# that isn't there, so the annotations are added in a follow-up commit once
+-# the secret is sealed and applied.
  apiVersion: networking.k8s.io/v1
  kind: Ingress
  metadata:
@@ -1292,32 +1285,86 @@ Expected: `SealedSecret`, then `0 (expected)`.
 +    nginx.ingress.kubernetes.io/auth-realm: "CND France — staging"
 ```
 
-- [ ] **Step 8: Verify and commit**
+- [ ] **Step 4: Verify, commit, and merge before DNS exists**
 
 ```bash
 kustomize build website-staging/ | kubectl apply --dry-run=client -f -
 git add website-staging/
 git commit -m "feat(website): gate staging behind basic auth
 
-Added after the TLS certificate issued, so the ACME HTTP-01 challenge ran
-against an unauthenticated ingress. The htpasswd credentials ship as a
-SealedSecret, matching every other secret in this repo."
+Sealed and landed before the DNS record exists, so there is no window where
+staging is publicly reachable without auth. Safe because cert-manager's ACME
+HTTP-01 solver uses a separate, more-specific Ingress for
+/.well-known/acme-challenge/ that does not inherit these annotations. The
+htpasswd credentials ship as a SealedSecret, matching every other secret in
+this repo."
 git push -u origin feat/website-staging-auth
 gh pr create --base main --title "Gate the website staging environment behind basic auth" \
   --body "Follow-up to the staging environment PR. Adds the htpasswd SealedSecret and the
-ingress-nginx basic-auth annotations, now that website-staging-tls has issued."
+ingress-nginx basic-auth annotations *before* the DNS record is created, so
+staging is never publicly reachable without auth. cert-manager's HTTP-01
+solver is unaffected — see the spec's risk table."
 ```
 
-- [ ] **Step 9: Confirm the gate after Flux reconciles**
+Wait for review and merge, and for Flux to reconcile, before continuing to step 6 — the DNS record should not exist until the gate is confirmed live.
+
+- [ ] **Step 5: Confirm the gate landed, with no DNS record yet**
+
+```bash
+dig +short staging.cloudnativedays.fr
+flux get kustomizations cnd-website-staging
+kubectl -n cnd-website-staging get ingress website \
+  -o jsonpath='{.metadata.annotations.nginx\.ingress\.kubernetes\.io/auth-type}{"\n"}'
+```
+
+Expected: `dig` returns nothing (no DNS record yet), the Kustomization is
+`Ready: True`, and the annotation prints `basic`. This confirms the auth gate
+is live in-cluster before the site becomes reachable at all.
+
+- [ ] **Step 6: Create the DNS record**
+
+`staging.cloudnativedays.fr` → the same address `cloudnativedays.fr` resolves to.
+
+Verify:
+
+```bash
+dig +short staging.cloudnativedays.fr
+dig +short cloudnativedays.fr
+```
+
+Expected: identical output.
+
+- [ ] **Step 7: Wait for the certificate**
+
+```bash
+kubectl -n cnd-website-staging get certificate website-staging-tls -w
+```
+
+Expected: `READY  True`. If it stays `False` for more than a few minutes:
+
+```bash
+kubectl -n cnd-website-staging describe certificate website-staging-tls
+kubectl -n cnd-website-staging get challenges
+```
+
+- [ ] **Step 8: Confirm the gate is enforced end-to-end**
 
 ```bash
 curl -sI https://staging.cloudnativedays.fr | head -1
 curl -sI -u cnd:'<password>' https://staging.cloudnativedays.fr | head -1
+curl -s -u cnd:'<password>' https://staging.cloudnativedays.fr/robots.txt
 ```
 
-Expected: `HTTP/2 401` then `HTTP/2 200`.
+Expected: `HTTP/2 401`, then `HTTP/2 200`, then:
 
-- [ ] **Step 10: Confirm production is untouched**
+```
+User-agent: *
+Disallow: /
+```
+
+If robots.txt shows `Allow: /`, the image was built without the `PUBLIC_SITE_URL` build arg — stop and fix Task 4 before continuing. At no point in this task was the site reachable without credentials.
+
+- [ ] **Step 9: Confirm production is untouched**
 
 ```bash
 curl -s https://cloudnativedays.fr/robots.txt

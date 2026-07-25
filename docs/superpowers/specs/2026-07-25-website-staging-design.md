@@ -2,7 +2,7 @@
 
 Date: 2026-07-25
 Component: `website-staging` (namespace `cnd-website-staging`, cluster `k8s-cndfrance-prod`)
-Companion repo: `cloudnativefrance/cndfrance-website` (CI, Astro config, robots)
+Companion repo: `cloudnativefrance/website` (CI, Astro config, robots)
 Scope: staging environment only. The UI changes it exists to validate are specced separately.
 
 ## Goal
@@ -167,6 +167,11 @@ flux/image-automation/website-staging.yaml         ImagePolicy + ImageUpdateAuto
 namespaces/namespaces.yaml                         + cnd-website-staging
 ```
 
+`ingress.yaml` above shows the target state. It ships in two commits: the
+Kustomization/Deployment/Service/Ingress land first without the `auth-*`
+annotations, and a follow-up commit adds them once the basic-auth secret is
+sealed — see Operator prerequisites below.
+
 `website-staging/` is a near-copy of `website/`, differing only in namespace, replica count
 (1 instead of 2), host, and the imagepolicy marker. Resource requests/limits, probes and
 securityContext are carried over unchanged so staging exercises the same runtime shape as
@@ -240,11 +245,11 @@ spec:
 
 ## Operator prerequisites
 
-Two steps require cluster or DNS access and are performed by the operator:
+Two steps require cluster or DNS access and are performed by the operator, in
+this order:
 
-1. **DNS** — `staging.cloudnativedays.fr` → the ingress IP (same target as
-   `cloudnativedays.fr`).
-2. **Seal the basic-auth secret**, after the namespace exists:
+1. **Seal the basic-auth secret and land the auth annotations**, after the
+   namespace exists:
 
    ```sh
    htpasswd -nbB cnd '<password>' > /tmp/auth
@@ -255,7 +260,18 @@ Two steps require cluster or DNS access and are performed by the operator:
    rm /tmp/auth
    ```
 
-   ingress-nginx requires the secret key to be named `auth`.
+   ingress-nginx requires the secret key to be named `auth`. `kubeseal` binds
+   a SealedSecret to a namespace/name string, not to any live cluster object,
+   so this — and the PR that adds the `auth-*` annotations to the Ingress —
+   can happen before DNS exists. That closes what would otherwise be a
+   publicly-reachable, unauthenticated window between the DNS record going
+   live and the auth gate landing.
+2. **DNS** — `staging.cloudnativedays.fr` → the ingress IP (same target as
+   `cloudnativedays.fr`), created only after the auth gate above has
+   reconciled. cert-manager's HTTP-01 solver still issues the certificate
+   normally: it uses a separate, more-specific Ingress for
+   `/.well-known/acme-challenge/` that does not inherit the `auth-*`
+   annotations.
 
 ## Risks & mitigations
 
