@@ -1,9 +1,10 @@
 ---
-# Basic auth is deliberately absent here: the SealedSecret it would reference
-# doesn't exist yet (sealing it requires cluster access, which is the
-# operator's step). ingress-nginx returns 503 when auth-secret names a Secret
-# that isn't there, so the annotations are added in a follow-up commit once
-# the secret is sealed and applied.
+# Basic auth gate. The secret is sealed into auth-sealedsecret.yaml alongside
+# this file; ingress-nginx requires its data key to be named exactly `auth`.
+#
+# cert-manager is unaffected: its HTTP-01 solver uses a separate, more-specific
+# Ingress for /.well-known/acme-challenge/ which does not inherit these
+# annotations.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -11,6 +12,9 @@ metadata:
   namespace: cnd-website-staging
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: website-staging-auth
+    nginx.ingress.kubernetes.io/auth-realm: "CND France — staging"
 spec:
   ingressClassName: public
   rules:
