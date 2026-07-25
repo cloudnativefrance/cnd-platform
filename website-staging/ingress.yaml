@@ -1,0 +1,30 @@
+---
+# Basic auth is deliberately absent here: the SealedSecret it would reference
+# doesn't exist yet (sealing it requires cluster access, which is the
+# operator's step). ingress-nginx returns 503 when auth-secret names a Secret
+# that isn't there, so the annotations are added in a follow-up commit once
+# the secret is sealed and applied.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: website
+  namespace: cnd-website-staging
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: public
+  rules:
+    - host: staging.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: website
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - staging.cloudnativedays.fr
+      secretName: website-staging-tls
