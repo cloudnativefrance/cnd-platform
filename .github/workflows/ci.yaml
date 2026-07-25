@@ -30,12 +30,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
-      # Pinned: an unpinned install floats to whatever upstream released, which
-      # would let a new default check turn this job red without a repo change.
+      # Installed from the GitHub release rather than the official action: that
+      # action is a Docker action which builds from alpine at runtime, so the
+      # gate went red the first time Docker Hub was unreachable from the runner.
+      # Pinned to the version validated locally, so CI and a laptop agree.
       - name: Install Polaris
-        uses: fairwindsops/polaris/.github/actions/setup-polaris@v10.2.1
-        with:
-          version: '8.5.0'
+        run: |
+          curl -sSL "https://github.com/FairwindsOps/polaris/releases/download/v10.2.1/polaris_10.2.1_linux_amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin polaris
+          polaris version
 
       - name: Install kustomize
         run: |
