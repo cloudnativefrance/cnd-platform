@@ -51,10 +51,16 @@ Concretely: pageviews, top pages, referrers, and a visitors-per-day trend.
   `TRACKER_SCRIPT_NAME` (default `script.js`) and `COLLECT_API_ENDPOINT` (default
   `/api/send`) are supported env vars specifically for moving off the paths that filter
   lists match.
-- **The tracker can scope itself to domains.** `data-domains` is "a comma-delimited list"
-  matched against `window.location.hostname`. Without it, `website-staging` — which runs the
-  same image from the same source at `staging.cloudnativedays.fr` — would silently pollute
-  production statistics.
+- **The website already has the prod-vs-staging mechanism, and it is build-time.**
+  `astro.config.mjs:19` sets `site: process.env.PUBLIC_SITE_URL || PROD_ORIGIN`, and
+  `src/lib/site-env.ts` exposes `isProductionOrigin(origin)`, already imported by
+  `Layout.astro:9` and used at `Layout.astro:74` to gate indexability. The module's own
+  comment states the rule: everything that must differ between production and staging
+  "derives from that single origin rather than from a second environment flag that could
+  drift out of sync with it", and both helpers "fail closed". Analytics follows that rule.
+  The tracker's own `data-domains` attribute would work, but it is precisely the second
+  source of truth the house pattern rejects — and it still loads the script on staging
+  before no-opping. The build-time gate emits no script at all.
 - **No external-dns.** DNS records are created manually, consistent with the website-staging,
   Ente and shortener specs.
 
@@ -172,21 +178,35 @@ sponsor as a measured audience size.
 
 ## Website change (companion repo)
 
-One tag in `cloudnativefrance/website` → `src/layouts/Layout.astro`, in `<head>`:
+One gated tag in `cloudnativefrance/website` → `src/layouts/Layout.astro`. It reuses the
+helper already imported at line 9, adding a sibling to the existing `indexable` const rather
+than overloading it — the two happen to share a condition today but mean different things:
 
-```html
-<script defer
-        src="https://stats.cloudnativedays.fr/cnd.js"
-        data-website-id="<uuid generated in the Umami UI>"
-        data-domains="cloudnativedays.fr,www.cloudnativedays.fr"
-        data-do-not-track="true"></script>
+```ts
+// Analytics ships only from the production origin, for the same reason as
+// `indexable`: a staging build must never write to production statistics.
+const analyticsEnabled = isProductionOrigin(Astro.site?.origin);
 ```
 
+```astro
+{analyticsEnabled && (
+  <script
+    defer
+    src="https://stats.cloudnativedays.fr/cnd.js"
+    data-website-id="<uuid generated in the Umami UI>"
+    data-do-not-track="true"
+  />
+)}
+```
+
+- The gate is **build-time**: a staging build emits no script tag and makes no request to
+  the stats host at all. It fails closed — an unknown or missing origin yields no analytics,
+  matching `site-env.ts`'s stated behaviour.
 - `data-website-id` is generated in the Umami dashboard after first login. It is **public by
   design** — it ships in the HTML — and is therefore not a secret and not sealed.
-- `data-domains` is what keeps `staging.cloudnativedays.fr` out of the production numbers.
-  Both the apex and `www` are listed because the website ingress serves both.
 - `data-do-not-track` honours the browser's DNT signal.
+- **No `data-domains`.** The origin is the single source of truth; a hardcoded domain list in
+  the tag would be a second one, which is the drift `site-env.ts` exists to prevent.
 
 No component-level changes: the requirement is audience basics, so no `data-umami-event`
 attributes anywhere.
@@ -215,7 +235,7 @@ legal advice.** Two follow-ups belong to whoever owns the site's legal pages
 | Analytics down entirely | **The website is unaffected** — the tag is `defer` and cross-origin | No coupling to the site's availability |
 | Postgres older than 12.14 | Startup fails fast in `check-db.js` | Version floor enforced at boot, not silently |
 | Rollout / node drain | Brief collection gap; pageviews in that window are lost | Accepted — analytics is not a system of record |
-| Staging traffic recorded | Would inflate production numbers | `data-domains` excludes it |
+| Staging traffic recorded | Would inflate production numbers | Build-time origin gate — staging emits no tag |
 | Ad blockers | Systematic undercount | Neutral script/endpoint names; documented escalation |
 
 ## Validation
@@ -239,8 +259,16 @@ Each verified by running the command and reading the output:
    immediately and stored in the password manager.
 4. After adding the website in the UI and deploying the script tag, a visit to
    `https://cloudnativedays.fr` appears in the dashboard within a minute.
-5. **A visit to `https://staging.cloudnativedays.fr` does *not* appear.** This is the
-   acceptance test for `data-domains`, and the one most likely to be silently wrong.
+5. **The staging HTML contains no tracker script at all.** Checked directly rather than by
+   the absence of data:
+   ```bash
+   curl -sS -u "$STAGING_AUTH" https://staging.cloudnativedays.fr | grep -c cnd.js   # 0
+   curl -sS https://cloudnativedays.fr | grep -c cnd.js                              # 1
+   ```
+   Verifiable locally before deploying: `PUBLIC_SITE_URL=https://staging.cloudnativedays.fr
+   pnpm build && grep -rl cnd.js dist/ | wc -l` must print `0`. This is the check most
+   likely to be silently wrong, so it is asserted on the artifact, not inferred from an
+   empty dashboard.
 6. The browser devtools Network tab shows the collection POST going to `/api/cnd`, not
    `/api/send`.
 7. A `Backup` object for `cnpg-umami` reaches `completed` after the first scheduled run.
