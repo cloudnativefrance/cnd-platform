@@ -43,7 +43,7 @@ files later tasks create.
 
 ## Prerequisites (human, before Task 1)
 
-- [ ] **Branch check.** This spec and plan were authored on `feat/url-shortener` alongside the shortener work, but the two components are independent and should ship separately. Start from a branch off `main` named `feat/website-analytics`. If the shortener branch has not merged yet, cherry-pick the two analytics doc commits (`59851a7`, `7ade62d`) onto it so the spec and plan travel with the code they describe.
+- [ ] **Branch.** Work on `feat/website-analytics`, which already branches from `main` and carries this spec and plan. It is independent of the shortener branch (PR #159) and can ship before or after it — the two components share no files. The only overlap is `namespaces/namespaces.yaml`, which both append to; whichever merges second may need a trivial conflict resolution there.
 - [ ] One DNS **A** record for `stats.cloudnativedays.fr` → cluster ingress IP. No external-dns in this cluster.
 - [ ] `kubectl --context k8s-cndfrance-prod get ns` works
 - [ ] `kubeseal --version` works and the controller is reachable
