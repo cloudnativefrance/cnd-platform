@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: umami
+  namespace: cnd-analytics
+  labels:
+    app.kubernetes.io/name: umami
+    app.kubernetes.io/component: analytics
+    app.kubernetes.io/part-of: cnd-france
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate, NOT RollingUpdate. With replicas:1, maxUnavailable:0 forbids
+  # scaling the old pod down before the new one is Ready, so maxSurge:1 would
+  # guarantee two pods overlap on every rollout — both running
+  # `prisma migrate deploy` via check-db.js against the same database. Prisma's
+  # advisory lock keeps the schema safe, but the second pod blocks on it while
+  # its readiness probe counts down, and past the liveness delay gets killed
+  # mid-migration. It also transiently doubles a 384Mi request on a cluster with
+  # documented scheduling pressure — to buy zero-downtime that this design
+  # explicitly does not want (see the Failure modes table: a collection gap on
+  # rollout is Accepted).
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: umami
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: umami
+        app.kubernetes.io/component: analytics
+        app.kubernetes.io/part-of: cnd-france
+    spec:
+      containers:
+        - name: umami
+          # v3 is PostgreSQL-only, so the plain version tag IS the postgres
+          # image — verified by digest equality with :postgresql-latest.
+          image: umamisoftware/umami:3.3.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            # DB_PASSWORD MUST come before DATABASE_URL: Kubernetes expands
+            # $(VAR) only against env vars defined earlier in this list.
+            # Sealing the password alone (rather than the whole URL) keeps the
+            # DB hostname out of the secret.
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: umami-cnpg-secret
+                  key: password
+            - name: DATABASE_URL
+              value: postgresql://umami:$(DB_PASSWORD)@cnpg-umami-rw:5432/umami
+            - name: APP_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: umami-secret
+                  key: app-secret
+            - name: DISABLE_TELEMETRY
+              value: "1"
+            # Off the default paths that ad-blocker filter lists match. A
+            # cloud-native audience blocks at well above the general rate, so
+            # the defaults would undercount badly and silently.
+            - name: TRACKER_SCRIPT_NAME
+              value: cnd.js
+            - name: COLLECT_API_ENDPOINT
+              value: /api/cnd
+          # /api/heartbeat returns {ok:true} without touching the database, so
+          # a Postgres outage degrades quietly instead of restart-looping.
+          readinessProbe:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            # A readiness failure never restarts anything, so a long initial
+            # delay buys no safety — it only delays Ready. Startup runs
+            # check-db (prisma migrate deploy) + update-tracker + start-server,
+            # whose duration is not knowable in advance, which is exactly the
+            # case a fixed delay handles badly. Poll early and often instead;
+            # if first-boot migration ever proves slow, add a startupProbe
+            # rather than growing these numbers.
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /api/heartbeat
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 384Mi
+            limits:
+              # cpu limit set because .polaris.yaml scores cpuLimitsMissing.
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # The image's USER is the NAME `nextjs`, not a UID, so runAsNonRoot
+            # alone fails admission: "container has runAsNonRoot and image has
+            # non-numeric user (nextjs), cannot verify user is non-root".
+            # The Dockerfile creates it with `adduser --system --uid 1001`.
+            runAsNonRoot: true
+            runAsUser: 1001
+            # NOT just "Next.js caches". The entrypoint runs
+            # `node scripts/update-tracker.js`, which rewrites public/script.js
+            # in place to bake COLLECT_API_ENDPOINT into the served tracker —
+            # it is what makes /api/cnd reach the browser. Under a read-only
+            # root that write fails EROFS, `set -e` aborts before
+            # `node server.js`, and the pod crash-loops for no visible reason.
+            # .polaris.yaml scores this `warning` and says "fix rather than
+            # exempt", so the reason has to be written down or someone will.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL

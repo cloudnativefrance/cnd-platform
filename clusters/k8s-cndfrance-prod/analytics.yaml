@@ -1,0 +1,32 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cnd-analytics
+  namespace: flux-system
+spec:
+  prune: true
+  interval: 2m0s
+  path: ./analytics
+  dependsOn:
+    - name: cnd-operators
+    # Every object here lands in a namespace owned by the cnd-namespaces
+    # Kustomization. photos.yaml omits this edge; without it a first reconcile
+    # that wins the race fails with `namespaces "cnd-analytics" not found` and
+    # stays NotReady until the next 2m pass.
+    - name: cnd-namespaces
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  # Without an explicit timeout Flux uses the interval (2m), shorter than a
+  # first reconcile: two CNPG instances, PVCs, initdb, then Umami's startup
+  # migrations. The health checks would report a timeout that reads as failure.
+  timeout: 10m0s
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: umami
+      namespace: cnd-analytics
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-umami
+      namespace: cnd-analytics

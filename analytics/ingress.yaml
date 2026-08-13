@@ -1,0 +1,30 @@
+---
+# No basic-auth annotations here, unlike website-staging and the shortener's
+# admin UI: Umami ships its own user accounts. The tracker script and the
+# collection endpoint must also stay publicly reachable for the website to
+# report at all.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: umami
+  namespace: cnd-analytics
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: public
+  rules:
+    - host: stats.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: umami
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - stats.cloudnativedays.fr
+      secretName: umami-tls

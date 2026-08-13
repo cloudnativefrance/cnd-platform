@@ -1,0 +1,69 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-umami
+spec:
+  description: "PostgreSQL cluster for Umami website analytics"
+  instances: 2
+
+  bootstrap:
+    initdb:
+      database: umami
+      owner: umami
+      secret:
+        name: umami-cnpg-secret
+
+  superuserSecret:
+    name: umami-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://cloudnativedaysfr/cnpg/umami"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: access-key-id
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secret-access-key
+        region:
+          name: cnd-france-scw-secret
+          key: region
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: 100m
+    limits:
+      # 2x the request, not equal to it. Equal values make the pod Guaranteed
+      # QoS with zero burst room, and the midnight ScheduledBackup runs
+      # barman-cloud-backup with gzip compression and S3 upload buffers inside
+      # this same pod — plus pg_basebackup whenever the replica resyncs. A hard
+      # 256Mi OOMKills there, promoting the standby and forcing a full resync,
+      # nightly. communication/photos uses 768Mi; this is the compromise with
+      # the cluster capacity pressure recorded in 88a8b26.
+      memory: "512Mi"
