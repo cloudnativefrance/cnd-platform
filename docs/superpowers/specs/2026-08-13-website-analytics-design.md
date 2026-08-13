@@ -28,7 +28,7 @@ Concretely: pageviews, top pages, referrers, and a visitors-per-day trend.
   whole `clickhouse/` configuration directory in its repo and requires ClickHouse alongside
   PostgreSQL; Matomo requires MySQL/MariaDB. Both would introduce a storage engine the
   cluster has no operator for — the same objection that decided Shlink over YOURLS in
-  [the shortener design](2026-08-13-url-shortener-design.md). The candidates that run on
+  the shortener design (PR #159; deliberately not a relative link, since that file is not on this branch and would 404 if this PR merges first). The candidates that run on
   plain PostgreSQL are **Umami** (Postgres-only as of v3) and **GoatCounter** (SQLite or
   Postgres). Umami was chosen for dashboard quality: the readers are the same non-technical
   comms team that uses the Shlink UI, and a dashboard nobody enjoys opening does not get
@@ -41,10 +41,21 @@ Concretely: pageviews, top pages, referrers, and a visitors-per-day trend.
 - **Migrations run at startup.** `package.json` defines
   `start-docker: npm-run-all check-db update-tracker start-server`, and
   `scripts/check-db.js:76` calls `execSync('prisma migrate deploy')`. The same script
-  queries `server_version_num`, so the documented PostgreSQL **v12.14+** floor is enforced
-  at boot rather than failing obscurely later.
-- **Umami authenticates itself.** It has built-in user accounts, so unlike the Shlink admin
-  SPA this needs no ingress basic-auth gate.
+  queries `server_version_num` — but it compares against `MIN_VERSION = '9.4.0'`
+  (`MIN_VERSION_NUM = 90400`), **not** the v12.14+ that Umami's README states as its
+  requirement. The boot check is therefore not the guarantee an earlier draft of this
+  document claimed: anything from 9.4 upward starts, and a version below 12.14 then fails
+  later inside Prisma migrations or at query time. CNPG's default major version is far above
+  both numbers, so this is a documentation correction rather than a deployment risk — but the
+  distinction matters when debugging a crash-loop, because the boot check will not be the
+  thing that rejected it.
+- **Umami authenticates itself — but it seeds a known account.** It has built-in user accounts,
+  so unlike the Shlink admin SPA this needs no ingress basic-auth gate in steady state. The
+  exception is the bootstrap window: Umami creates a default `admin` / `umami` login and
+  offers no env var to set the initial password. That is an ordering problem, not a missing
+  manifest field, so it is solved by ordering — the DNS record is created only after the
+  password has been changed over a `kubectl port-forward`, and an acceptance criterion asserts
+  the default credential returns 401.
 - **`APP_SECRET` is required**, not optional: "a random string used to secure authentication
   tokens. Each installation should have a unique value."
 - **Ad-blocking is a first-order concern for this audience, and Umami ships the mitigation.**
@@ -98,9 +109,12 @@ namespaces/namespaces.yaml                   ← + cnd-analytics
 clusters/k8s-cndfrance-prod/analytics.yaml   ← Flux Kustomization "cnd-analytics"
 ```
 
-The Flux Kustomization mirrors `photos.yaml`: `path: ./analytics`, `prune: true`,
-`interval: 2m0s`, `dependsOn: cnd-operators`, source `customer`, health checks on the
-`umami` Deployment and the `cnpg-umami` Cluster.
+The Flux Kustomization mirrors `photos.yaml`, with health checks on the `umami` Deployment
+and the `cnpg-umami` Cluster. Two deliberate departures from that template: it also
+`dependsOn` `cnd-namespaces` (every object lands in a namespace that Kustomization owns, and
+photos races it), and it sets an explicit `timeout` longer than the reconcile interval, since
+a first reconcile provisions two CNPG instances and their PVCs before Umami's migrations even
+start. Field values live in the plan, not here, so the two documents cannot disagree.
 
 ### Manifests
 
@@ -114,7 +128,7 @@ The Flux Kustomization mirrors `photos.yaml`: `path: ./analytics`, `prune: true`
 | `cnd-france-scw-secret.yaml` | SealedSecret resealed into `cnd-analytics` |
 | `deployment.yaml` | `umamisoftware/umami:3.3.0`, 1 replica |
 | `service.yaml` | ClusterIP `umami`, port 3000 named `http` |
-| `ingress.yaml` | `stats.cloudnativedays.fr`, letsencrypt, no basic auth |
+| `ingress.yaml` | `stats.cloudnativedays.fr`, letsencrypt, no basic auth (Umami has its own accounts; the seeded-credential window is closed by DNS ordering instead) |
 | `.bootstrap.sh` | generates the DB password and `APP_SECRET`, reseals the Scaleway creds, writes all three SealedSecrets |
 
 ### Configuration
@@ -144,12 +158,18 @@ error.
 Both probes hit `/api/heartbeat`, which does not touch the database — an analytics outage
 should degrade quietly rather than restart-loop.
 
-| Container | CPU req | Mem req | Mem limit |
-|---|---|---|---|
-| `umami` (Next.js, Node 18.18+) | 100m | 384Mi | 512Mi |
-| `cnpg-umami` ×2 | 100m | 256Mi | 256Mi |
+| Container | CPU req | CPU limit | Mem req | Mem limit |
+|---|---|---|---|---|
+| `umami` (Next.js, Node 18.18+) | 100m | 500m | 384Mi | 512Mi |
+| `cnpg-umami` ×2 | 100m | — | 256Mi | 512Mi |
 
-Roughly 900Mi and 300m requested, capping at 1Gi — on top of the shortener's ~800Mi. Both
+The CNPG memory limit is 2× its request, not equal to it: equal values make the pod
+Guaranteed QoS with no burst room, and the midnight `ScheduledBackup` runs
+`barman-cloud-backup` with gzip and S3 buffers inside that same pod, so the first spike
+OOMKills, fails over, and forces a full replica resync — nightly. CPU limits are set because
+`.polaris.yaml` scores `cpuLimitsMissing`.
+
+Roughly 900Mi and 300m requested, capping at 1.5Gi — on top of the shortener's ~800Mi. Both
 components together stay well inside the envelope that made Baserow untenable (commit
 `88a8b26`), but they should be sized together rather than each in isolation.
 
@@ -162,6 +182,15 @@ signal that it was doing so.
 
 `TRACKER_SCRIPT_NAME: cnd.js` and `COLLECT_API_ENDPOINT: /api/cnd` defeat path-based rules.
 They do **not** defeat a rule targeting the `stats.` hostname, should one ever be listed.
+
+**How you would know it is not enough.** "The numbers look implausible" is not a trigger: the
+undercount produces no signal about its own size, and ticket sales are not a denominator for
+pageviews. Use a ratio against a server-side count the platform already produces — the
+ingress-nginx per-host request count for `cloudnativedays.fr`, which the cluster's monitoring
+already scrapes. Record that ratio in `analytics/README.md` once at go-live, so a later
+reading has a baseline to be implausible *against*. The same instrument catches the adjacent
+silent failure: collection stopping entirely, which a stale `data-website-id` after a restore
+would cause and which otherwise looks identical to "quiet week".
 
 **Decision: ship the neutral names now.** The complete fix is serving the script same-origin
 from `cloudnativedays.fr`, which requires an `ExternalName` Service inside `cnd-website`
@@ -221,9 +250,11 @@ measurement under CNIL guidance. **This document states a technical property; it
 legal advice.** Two follow-ups belong to whoever owns the site's legal pages
 (`src/layouts/LegalPageLayout.astro` exists in the website repo):
 
-- Confirm the no-banner approach for this configuration.
-- Add an analytics mention to the privacy page naming the tool, what is collected, and that
-  it is self-hosted.
+- **Add an analytics mention to the privacy page** naming the tool, what is collected, and
+  that it is self-hosted. This is *not* left unowned: it ships as a step in the plan's Task 5,
+  in the same PR as the tracker tag, so the two cannot diverge.
+- **Confirm the no-banner approach for this configuration.** A human prerequisite that blocks
+  production promotion (plan Task 5 Step 9), not an open-ended note.
 
 `DISABLE_TELEMETRY: "1"` stops the instance reporting its own usage upstream.
 
@@ -233,7 +264,7 @@ legal advice.** Two follow-ups belong to whoever owns the site's legal pages
 |---|---|---|
 | Postgres unavailable | Dashboard and collection fail | CNPG 2 instances, automatic failover |
 | Analytics down entirely | **The website is unaffected** — the tag is `defer` and cross-origin | No coupling to the site's availability |
-| Postgres older than 12.14 | Startup fails fast in `check-db.js` | Version floor enforced at boot, not silently |
+| Postgres below 9.4 | Startup fails fast in `check-db.js` | Enforced at boot. Note the enforced floor is 9.4, not the 12.14 Umami documents — between the two, failures surface later, in Prisma migrations |
 | Rollout / node drain | Brief collection gap; pageviews in that window are lost | Accepted — analytics is not a system of record |
 | Staging traffic recorded | Would inflate production numbers | Build-time origin gate — staging emits no tag |
 | Ad blockers | Systematic undercount | Neutral script/endpoint names; documented escalation |
@@ -250,28 +281,27 @@ the warning pile documented in `.polaris.yaml`.
 
 ## Acceptance criteria
 
-Each verified by running the command and reading the output:
+Assertions only — the commands that produce them live in the plan (Task 4 Steps 8-9 and Task 5
+Steps 5, 8, 10, 11), so a fix to a command does not have to be made twice.
 
-1. `curl -sSI https://stats.cloudnativedays.fr/` returns 200 and the login page loads.
-2. `curl -sS https://stats.cloudnativedays.fr/cnd.js | head -c 100` returns JavaScript —
-   proving `TRACKER_SCRIPT_NAME` took effect and that `/script.js` is *not* the live path.
-3. First login succeeds with the default `admin` account, and the password is changed
-   immediately and stored in the password manager.
-4. After adding the website in the UI and deploying the script tag, a visit to
-   `https://cloudnativedays.fr` appears in the dashboard within a minute.
-5. **The staging HTML contains no tracker script at all.** Checked directly rather than by
-   the absence of data:
-   ```bash
-   curl -sS -u "$STAGING_AUTH" https://staging.cloudnativedays.fr | grep -c cnd.js   # 0
-   curl -sS https://cloudnativedays.fr | grep -c cnd.js                              # 1
-   ```
-   Verifiable locally before deploying: `PUBLIC_SITE_URL=https://staging.cloudnativedays.fr
-   pnpm build && grep -rl cnd.js dist/ | wc -l` must print `0`. This is the check most
-   likely to be silently wrong, so it is asserted on the artifact, not inferred from an
-   empty dashboard.
-6. The browser devtools Network tab shows the collection POST going to `/api/cnd`, not
-   `/api/send`.
-7. A `Backup` object for `cnpg-umami` reaches `completed` after the first scheduled run.
+1. `stats.cloudnativedays.fr` returns 200 and serves the login page.
+2. `/cnd.js` serves JavaScript, proving `TRACKER_SCRIPT_NAME` took effect. `/script.js` keeps
+   serving as well — the setting adds an alias rather than replacing the default — so its
+   availability must **not** be asserted against.
+3. **A login POST with `admin` / `umami` returns 401.** Umami seeds that account with no env
+   var to set the initial password, so the DNS record is created only after the password has
+   been changed over a port-forward. This criterion asserts the fix rather than trusting an
+   instruction to act "immediately".
+4. A visit to `https://cloudnativedays.fr` appears in the dashboard within a minute, and the
+   collection POST goes to `/api/cnd`.
+5. **The staging build emits no tracker script at all** — asserted on the built artifact
+   (`PUBLIC_SITE_URL=…staging… pnpm build`, then grep `dist/`), not inferred from an empty
+   dashboard, and guarded thereafter by `tests/build/analytics-tracker-guard.test.ts`.
+6. The privacy page names the tool and what it collects, in both languages.
+7. An **on-demand** `Backup` for `cnpg-umami` reaches `completed` — triggered right after
+   rollout rather than left until midnight, since it is the only proof the resealed Scaleway
+   credentials authenticate against the backup path. The scheduled one is confirmed the
+   morning after.
 
 ## Out of scope
 
