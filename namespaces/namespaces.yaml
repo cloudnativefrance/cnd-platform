@@ -38,3 +38,8 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: cnd-website-staging
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnd-shortener

@@ -1,0 +1,67 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-shlink
+spec:
+  description: "PostgreSQL cluster for the Shlink URL shortener"
+  instances: 2
+
+  bootstrap:
+    initdb:
+      database: shlink
+      owner: shlink
+      secret:
+        name: shlink-cnpg-secret
+
+  superuserSecret:
+    name: shlink-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://cloudnativedaysfr/cnpg/shlink"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: access-key-id
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secret-access-key
+        region:
+          name: cnd-france-scw-secret
+          key: region
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: 100m
+    limits:
+      # 2x the request, not equal to it: an equal limit makes the pod
+      # Guaranteed QoS with zero burst room, and the midnight ScheduledBackup
+      # runs barman-cloud-backup with gzip + S3 buffers inside this same pod.
+      # A hard 256Mi OOMKills there, failing over and forcing a full replica
+      # resync — nightly. photos uses 768Mi; this is the compromise.
+      memory: "512Mi"
