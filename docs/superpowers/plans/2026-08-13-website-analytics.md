@@ -34,20 +34,19 @@ files later tasks create.
 - Image, pinned: `umamisoftware/umami:3.3.0`. Verified identical by digest to `postgresql-latest` (`sha256:62ac5cff2e48beea540653fdfacf8e4477c0182226a4aebdc19813e773f8985a`); v3 is Postgres-only, so there is no separate `postgresql-` tag to chase. `.polaris.yaml` sets `tagNotSpecified: danger` — never `:latest`.
 - PostgreSQL: Umami's README states **12.14+**, but `scripts/check-db.js` only enforces `MIN_VERSION = '9.4.0'`. CNPG's default major version clears both, so do not pin an older one — and do not expect the boot check to catch a version between 9.4 and 12.14, because it will not.
 - CNPG house pattern copied from `communication/photos/cnpg-cluster.yaml`: `instances: 2`, `storageClass: node-local-retain`, `size: 10Gi`, `endpointURL: https://s3.fr-par.scw.cloud`, `retentionPolicy: "90d"`, PodMonitor block with both relabelings. Backup path `s3://cloudnativedaysfr/cnpg/umami`.
-- **`scripts/lib/seal.sh` is a prerequisite from PR #159** (see the Branch note). The bootstrap sources it rather than re-deriving the seal/reseal/strip sequence for a third time. Its `url_safe_password` uses `openssl rand -hex`, so the DB password interpolated into `DATABASE_URL` is URL-safe by construction — the hazard is removed rather than documented.
+- The bootstrap is **self-contained**, matching `communication/photos/.bootstrap.sh`, so this PR merges independently of any other. The DB password uses `openssl rand -hex` — URL-safe by construction, since it is interpolated into `DATABASE_URL` — which removes the hazard rather than documenting it. The duplication against the other component bootstraps is a knowingly accepted cost of that independence; a fix made here should be grepped for in the sibling scripts.
 - `TRACKER_SCRIPT_NAME: cnd.js` and `COLLECT_API_ENDPOINT: /api/cnd` — never the defaults `script.js` / `/api/send`, which filter lists match.
 - Container sets `allowPrivilegeEscalation: false`, `runAsNonRoot: true`, `runAsUser: 1001`, CPU and memory requests, a CPU limit, and both probes. The image's user is the *name* `nextjs`, not a UID, so `runAsNonRoot` alone would fail admission with "non-numeric user, cannot verify user is non-root" — hence the explicit `runAsUser` (the Dockerfile creates `nextjs` with `--uid 1001`). Polaris scores the manifest, not the image.
 - `readOnlyRootFilesystem: false` — **not** merely because Next.js caches. The entrypoint runs `node scripts/update-tracker.js`, which rewrites `public/script.js` in place to bake in `COLLECT_API_ENDPOINT`. That write is what makes `/api/cnd` reach the browser at all; with a read-only root and no emptyDir over it, the write fails EROFS, `set -e` aborts before `node server.js`, and the pod crash-loops with no obvious cause.
 - Probes hit `/api/heartbeat` — verified to return `{ok: true}` with no database access, so a DB outage does not restart-loop the pod.
-- `creationTimestamp: null` inside a SealedSecret template is stripped by `seal.sh` and asserted repo-wide by `scripts/validate-manifests.sh` step 3 (both from PR #159). Only the nested form matters; the top-level one is on main and green.
+- `creationTimestamp: null` inside a SealedSecret template is stripped by the bootstrap (kubeconform in CI rejects it — `27b235b`, `6c61223`). Only the nested 6-space form is stripped; the top-level one is on main and green.
 - Commit messages and PR text in English; never add co-author or generated-by trailers.
 
 ## Prerequisites (human, before Task 1)
 
-- [ ] **Branch.** Work on `feat/website-analytics` (PR #160). It **depends on PR #159**, which
-  adds `scripts/lib/seal.sh` and the third gate step this plan relies on — merge #159 first, or
-  copy those two files across. The branches also both append to `namespaces/namespaces.yaml`
-  and to the README.md domain list; whichever merges second resolves both trivially.
+- [ ] **Branch.** Work on `feat/website-analytics` (PR #160). Independent of the shortener
+  branch (PR #159) — either can merge first. They both append to `namespaces/namespaces.yaml`
+  and to the README.md domain list, so whichever merges second resolves two trivial conflicts.
 - [ ] **Do NOT create the DNS record yet.** `stats.cloudnativedays.fr` → cluster ingress is created in Task 4 Step 7, *after* the seeded `admin`/`umami` password has been changed over a port-forward. Creating it up front would publish an admin panel on documented default credentials for however long it takes a human to reach the login page. There is no external-dns here, so the timing is entirely in your hands — which is what makes this free.
 - [ ] `kubectl --context k8s-cndfrance-prod get ns` works
 - [ ] `kubeseal --version` works and the controller is reachable
@@ -117,40 +116,60 @@ Create `analytics/.bootstrap.sh`:
 # Plaintexts are stashed in a 0600 file you must move to your password manager
 # and then delete.
 #
-# The seal/reseal/strip mechanics live in scripts/lib/seal.sh — see that file
-# for why they are not inlined here.
+# Structure follows communication/photos/.bootstrap.sh deliberately: each
+# component's bootstrap is self-contained so its PR can merge independently of
+# any other. The cost is real — the reseal block and the creationTimestamp
+# workaround now exist in more than one place — and is accepted knowingly. If a
+# kubeseal or kubeconform quirk is ever fixed here, grep the other
+# .bootstrap.sh files for the same code.
 #
 # Manual prereqs (do these BEFORE running this script):
-#   1. `kubectl config use-context k8s-cndfrance-prod` — the script refuses to
-#      run on any other context, because kubeseal seals against the CURRENT
-#      context regardless of what --context is passed to kubectl.
-#   2. Do NOT create the stats.cloudnativedays.fr DNS record yet. It is created
-#      in Task 4 Step 7, after the seeded admin password has been changed.
+#   1. `kubectl config use-context k8s-cndfrance-prod`. kubeseal fetches the
+#      sealing certificate from the CURRENT context regardless of what
+#      --context is passed to kubectl, so sealing on the wrong context yields
+#      files that pass kustomize, kubeconform and CI, and fail only after
+#      reconcile with "no key could decrypt secret".
+#   2. Do NOT create the stats.cloudnativedays.fr DNS record yet — it is
+#      created in Task 4 Step 7, after the seeded admin password is changed.
 
 set -euo pipefail
 trap 'echo "ERROR: bootstrap failed at line $LINENO" >&2' ERR
 
-source "$(git rev-parse --show-toplevel)/scripts/lib/seal.sh"
-
+CTX="k8s-cndfrance-prod"
 NS="cnd-analytics"
+SOURCE_NS="cnd-project"   # where the existing Scaleway secret lives
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_FILE="$HOME/.umami-bootstrap-secrets.txt"
 
 echo "==> Bootstrapping Umami SealedSecrets in namespace ${NS}"
 
-require_bins openssl kubeseal kubectl jq kustomize
-require_context
+for bin in openssl kubeseal kubectl jq kustomize; do
+  command -v "$bin" >/dev/null || { echo "ERROR: $bin not found on PATH" >&2; exit 1; }
+done
+
+CURRENT_CTX="$(kubectl config current-context)"
+if [[ "${CURRENT_CTX}" != "${CTX}" ]]; then
+  echo "ERROR: current context is '${CURRENT_CTX}', expected '${CTX}'." >&2
+  echo "       kubeseal would seal against the wrong cluster. Run:" >&2
+  echo "         kubectl config use-context ${CTX}" >&2
+  exit 1
+fi
+
+# Everything below writes plaintext at some point. 0600 from creation, rather
+# than a chmod after a redirect has already created the file world-readable.
+umask 077
 
 # ---------- Generate plaintexts ----------
-# url_safe_password uses `openssl rand -hex`, so the value is URL-safe by
-# construction. This matters because it is interpolated into DATABASE_URL: a
-# '/' or '+' would corrupt the URL and surface as a confusing auth failure
-# rather than a parse error.
+# hex, not base64: the DB password is interpolated into DATABASE_URL, where a
+# '/' or '+' corrupts the URL and surfaces as a confusing auth failure rather
+# than a parse error. Hex is URL-safe by construction, so there is no hazard to
+# check for afterwards. 32 bytes = 128 bits.
 echo "==> Generating secrets"
-PG_PASSWORD="$(url_safe_password)"
-APP_SECRET="$(openssl rand -base64 32 | tr -d '\n')"   # not URL-interpolated
+PG_PASSWORD="$(openssl rand -hex 32)"
+APP_SECRET="$(openssl rand -base64 32 | tr -d '\n')"   # never URL-interpolated
 
-secure_file "${BACKUP_FILE}"
+install -m 600 /dev/null "${BACKUP_FILE}"
 {
   echo "# Umami bootstrap secrets — generated $(date -Iseconds)"
   echo "# MOVE these to a password manager and DELETE this file."
@@ -160,17 +179,67 @@ secure_file "${BACKUP_FILE}"
 } > "${BACKUP_FILE}"
 echo "    Plaintexts written to ${BACKUP_FILE} (mode 600)."
 
-# ---------- Seal ----------
+# ---------- Reseal Scaleway creds ----------
+# Read once, extract three times — not three kubectl calls.
+echo "==> Reading Scaleway creds from namespace ${SOURCE_NS}"
+SCW_DATA="$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret cnd-france-scw-secret -o json)"
+SCW_ACCESS_KEY_ID="$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @base64d')"
+SCW_SECRET_ACCESS_KEY="$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')"
+SCW_REGION="$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')"
+
 echo "==> Resealing cnd-france-scw-secret for ${NS}"
-reseal_scw_secret "${NS}" "${DIR}/cnd-france-scw-secret.yaml"
+kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
+  --namespace "${NS}" \
+  --from-literal=access-key-id="${SCW_ACCESS_KEY_ID}" \
+  --from-literal=secret-access-key="${SCW_SECRET_ACCESS_KEY}" \
+  --from-literal=region="${SCW_REGION}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/cnd-france-scw-secret.yaml"
 
+# ---------- Database credentials ----------
+# CNPG expects kubernetes.io/basic-auth with username + password.
 echo "==> Sealing umami-cnpg-secret"
-seal_basic_auth "${NS}" umami-cnpg-secret "${DIR}/umami-cnpg-secret.yaml" \
-  umami "${PG_PASSWORD}"
+kubectl --context "${CTX}" create secret generic umami-cnpg-secret \
+  --namespace "${NS}" \
+  --type kubernetes.io/basic-auth \
+  --from-literal=username=umami \
+  --from-literal=password="${PG_PASSWORD}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/umami-cnpg-secret.yaml"
 
+# ---------- Application secret ----------
 echo "==> Sealing umami-secret (APP_SECRET)"
-seal_literals "${NS}" umami-secret "${DIR}/umami-secret.yaml" \
-  "app-secret=${APP_SECRET}"
+kubectl --context "${CTX}" create secret generic umami-secret \
+  --namespace "${NS}" \
+  --from-literal=app-secret="${APP_SECRET}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/umami-secret.yaml"
+
+# ---------- Strip the templated creationTimestamp ----------
+# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
+# passes it into spec.template.metadata, where the kubeconform Dagger module in
+# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
+# to main twice already: 27b235b, 6c61223.
+#
+# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
+# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
+# it on main with green CI — so removing it too would make these files differ
+# cosmetically from every existing SealedSecret for no reason.
+for f in cnd-france-scw-secret.yaml umami-cnpg-secret.yaml umami-secret.yaml; do
+  sed -i '/^      creationTimestamp: null$/d' "${DIR}/${f}"
+done
+
+# ---------- Validate ----------
+# Non-empty is too weak: a stderr dump or a truncated write also satisfies it.
+# The render catches valid YAML of the wrong kind and files the kustomization
+# does not list. It can only run once every resource exists, so it is deferred
+# to Task 3 Step 4 — here we assert the files at least parse as SealedSecrets.
+echo "==> Verifying the three sealed files"
+for f in cnd-france-scw-secret.yaml umami-cnpg-secret.yaml umami-secret.yaml; do
+  grep -q '^kind: SealedSecret$' "${DIR}/${f}" \
+    || { echo "ERROR: ${DIR}/${f} is not a SealedSecret" >&2; exit 1; }
+done
+echo "    OK: 3 SealedSecrets written"
 
 echo ""
 echo "==> Plaintext backup at ${BACKUP_FILE} — MOVE to your password manager + DELETE."
