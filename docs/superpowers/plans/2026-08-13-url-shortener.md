@@ -40,15 +40,18 @@ Commits stay local until Task 5 Step 3, which pushes and opens the PR in one go.
 - Images, pinned exactly: `shlinkio/shlink:5.1.5`, `shlinkio/shlink-web-client:4.8.1`. Both verified present on Docker Hub. `.polaris.yaml` sets `tagNotSpecified: danger` — never use `:latest` or `:stable`.
 - CNPG house pattern, copied verbatim from `communication/photos/cnpg-cluster.yaml`: `instances: 2`, `storageClass: node-local-retain`, `size: 10Gi`, `endpointURL: https://s3.fr-par.scw.cloud`, `retentionPolicy: "90d"`, PodMonitor block with the two metric relabelings.
 - Backup destination: `s3://cloudnativedaysfr/cnpg/shlink`.
-- Every container sets `allowPrivilegeEscalation: false`, resource requests, and both probes — `.polaris.yaml` currently reports these as `warning`, and this component must not add to that pile.
+- Every container sets `allowPrivilegeEscalation: false`, `runAsNonRoot: true`, CPU **and** memory requests, a CPU limit, and both probes. Polaris scores the *manifest*, not the image, so "the image already runs as non-root" does not satisfy `runAsRootAllowed` — an earlier draft made exactly that mistake. The only warnings this component may add are the two `notReadOnlyRootFilesystem` ones, which are explained in the manifests.
 - `readOnlyRootFilesystem: false` on both containers. The Shlink entrypoint does `mkdir -p data/cache data/locks data/log data/proxies data/temp-geolite` under `/etc/shlink`; the web client writes `servers.json` into its nginx root.
 - `GEOLITE_LICENSE_KEY` is never set. The entrypoint passes `--skip-download-geolite` when it is empty; setting it would require a MaxMind account for a disabled feature.
-- Secrets are Bitnami SealedSecrets. After sealing, strip `creationTimestamp: null` — kubeconform in CI rejects it inside `spec.template.metadata` (commits `27b235b`, `6c61223`).
+- Secrets are Bitnami SealedSecrets, sealed via `scripts/lib/seal.sh`, which strips `creationTimestamp: null` from `spec.template.metadata` (kubeconform in CI rejects it there). Only the nested occurrence is stripped — the top-level one is harmless and present on several SealedSecrets already on main.
 - Ingress: `ingressClassName: public`, `cert-manager.io/cluster-issuer: letsencrypt`.
 - Commit messages and PR text in English; never add co-author or generated-by trailers.
+- **`scripts/lib/seal.sh` already exists** — it ships in this PR alongside the plan. The bootstrap script sources it rather than re-deriving the seal/reseal/strip sequence, which was on its way to a third verbatim copy. Do not inline those mechanics again; extend the helper instead.
+- **`scripts/validate-manifests.sh` now has a third gate step** asserting no `creationTimestamp: null` inside a SealedSecret template, repo-wide. This repo shipped that exact failure to main twice (`27b235b`, `6c61223`) because the local gate had no opinion about it and only CI did.
 
 ## Prerequisites (human, before Task 1)
 
+- [ ] **Branch.** Work on `feat/url-shortener` (PR #159). The sibling analytics branch (PR #160) is independent, but the two overlap in exactly two files — `namespaces/namespaces.yaml` and the README.md domain list, both of which each branch appends to. Whichever merges second resolves both trivially.
 - [ ] Two DNS **A** records pointing at the cluster ingress IP — there is no external-dns in this cluster:
   - `s.cloudnativedays.fr`
   - `links.cloudnativedays.fr`
@@ -122,40 +125,40 @@ Create `communication/shortener/.bootstrap.sh` and `chmod +x` it:
 #
 # Generates the DB password, the initial Shlink API key and the admin-UI
 # basic-auth credential, reseals the Scaleway backup creds into the new
-# namespace, writes 4 SealedSecret YAML files into communication/shortener/,
-# and stashes the plaintexts to a backup file you must move to your password
-# manager and then delete.
+# namespace, and writes 4 SealedSecret YAML files into communication/shortener/.
+# Plaintexts are stashed in a 0600 file you must move to your password manager
+# and then delete.
+#
+# The seal/strip/reseal mechanics live in scripts/lib/seal.sh so this script
+# only expresses what is specific to the shortener. See that file for why.
 #
 # Manual prereqs (do these BEFORE running this script):
 #   1. Two DNS A records pointing at the cluster ingress:
 #        s.cloudnativedays.fr
 #        links.cloudnativedays.fr
-#   2. Confirm `kubectl --context k8s-cndfrance-prod` works and `kubeseal`
-#      can reach the controller (`kubeseal --version` works).
+#   2. `kubectl config use-context k8s-cndfrance-prod` — the script refuses to
+#      run on any other context, because kubeseal would seal against the wrong
+#      cluster.
 
 set -euo pipefail
 trap 'echo "ERROR: bootstrap failed at line $LINENO" >&2' ERR
 
-CTX="k8s-cndfrance-prod"
-NS="cnd-shortener"
-SOURCE_NS="cnd-project"   # where the existing Scaleway secret lives
-ADMIN_USER="cnd"
+source "$(git rev-parse --show-toplevel)/scripts/lib/seal.sh"
 
+NS="cnd-shortener"
+ADMIN_USER="cnd"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_FILE="$HOME/.shlink-bootstrap-secrets.txt"
 
 echo "==> Bootstrapping Shlink SealedSecrets in namespace ${NS}"
-echo "    Working dir: ${DIR}"
-echo "    Plaintext backup: ${BACKUP_FILE}"
 
-for bin in openssl kubeseal kubectl jq; do
-  command -v "$bin" >/dev/null || { echo "$bin not found"; exit 1; }
-done
+require_bins openssl kubeseal kubectl jq kustomize
+require_context
 
 # ---------- Generate plaintexts ----------
 echo "==> Generating secrets"
-PG_PASSWORD="$(openssl rand -base64 24 | tr -d '\n=' | tr '/+' '_-')"
-ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -d '\n=' | tr '/+' '_-')"
+PG_PASSWORD="$(url_safe_password)"
+ADMIN_PASSWORD="$(url_safe_password 12)"
 
 # Shlink accepts any string as an API key; a UUID is the upstream convention.
 if command -v uuidgen >/dev/null; then
@@ -166,10 +169,12 @@ fi
 
 # ingress-nginx reads an htpasswd file. nginx supports apr1, so we avoid a
 # dependency on apache2-utils.
-ADMIN_HASH="$(openssl passwd -apr1 -stdin <<< "${ADMIN_PASSWORD}")"
-AUTH_LINE="${ADMIN_USER}:${ADMIN_HASH}"
+AUTH_LINE="${ADMIN_USER}:$(openssl passwd -apr1 -stdin <<< "${ADMIN_PASSWORD}")"
 
 # ---------- Snapshot plaintexts to a file the user MUST move ----------
+# secure_file creates it 0600 before anything is written, rather than chmod-ing
+# a world-readable file after the fact.
+secure_file "${BACKUP_FILE}"
 {
   echo "# Shlink bootstrap secrets — generated $(date -Iseconds)"
   echo "# MOVE these to a password manager and DELETE this file."
@@ -179,71 +184,29 @@ AUTH_LINE="${ADMIN_USER}:${ADMIN_HASH}"
   echo "ADMIN_UI_USER=${ADMIN_USER}"
   echo "ADMIN_UI_PASSWORD=${ADMIN_PASSWORD}"
 } > "${BACKUP_FILE}"
-chmod 600 "${BACKUP_FILE}"
 echo "    Plaintexts written to ${BACKUP_FILE} (mode 600)."
 
-# ---------- Reseal Scaleway creds from cnd-project ----------
-echo "==> Reading Scaleway creds from namespace ${SOURCE_NS}"
-SCW_DATA=$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret cnd-france-scw-secret -o json)
-SCW_ACCESS_KEY_ID=$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @base64d')
-SCW_SECRET_ACCESS_KEY=$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')
-SCW_REGION=$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')
-
+# ---------- Seal ----------
 echo "==> Resealing cnd-france-scw-secret for ${NS}"
-kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
-  --namespace "${NS}" \
-  --from-literal=access-key-id="${SCW_ACCESS_KEY_ID}" \
-  --from-literal=secret-access-key="${SCW_SECRET_ACCESS_KEY}" \
-  --from-literal=region="${SCW_REGION}" \
-  --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/cnd-france-scw-secret.yaml"
+reseal_scw_secret "${NS}" "${DIR}/cnd-france-scw-secret.yaml"
 
-# ---------- Database credentials ----------
-# CNPG expects kubernetes.io/basic-auth with username + password. The same
-# secret is used for bootstrap.initdb and superuserSecret, matching every
-# other CNPG cluster in this repo.
 echo "==> Sealing shlink-cnpg-secret"
-kubectl --context "${CTX}" create secret generic shlink-cnpg-secret \
-  --namespace "${NS}" \
-  --type kubernetes.io/basic-auth \
-  --from-literal=username=shlink \
-  --from-literal=password="${PG_PASSWORD}" \
-  --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-cnpg-secret.yaml"
+seal_basic_auth "${NS}" shlink-cnpg-secret "${DIR}/shlink-cnpg-secret.yaml" \
+  shlink "${PG_PASSWORD}"
 
-# ---------- Shlink initial API key ----------
 echo "==> Sealing shlink-secret (initial API key)"
-kubectl --context "${CTX}" create secret generic shlink-secret \
-  --namespace "${NS}" \
-  --from-literal=initial-api-key="${API_KEY}" \
-  --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-secret.yaml"
+seal_literals "${NS}" shlink-secret "${DIR}/shlink-secret.yaml" \
+  "initial-api-key=${API_KEY}"
 
-# ---------- Admin UI basic auth ----------
 # ingress-nginx requires the data key to be named exactly `auth`.
 echo "==> Sealing shlink-admin-auth (basic auth for the admin UI)"
-kubectl --context "${CTX}" create secret generic shlink-admin-auth \
-  --namespace "${NS}" \
-  --from-literal=auth="${AUTH_LINE}" \
-  --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/web-client-auth-sealedsecret.yaml"
-
-# ---------- Strip stale 'creationTimestamp: null' ----------
-# kubectl create --dry-run=client emits it and kubeseal passes it through into
-# spec.template.metadata, where the repo's kubeconform CI rejects it.
-for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
-  sed -i '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' "${DIR}/${f}"
-done
-
-# ---------- Validate ----------
-echo "==> Verifying secret files exist"
-for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
-  [[ -s "${DIR}/${f}" ]] || { echo "ERROR: missing or empty ${DIR}/${f}"; exit 1; }
-done
+seal_literals "${NS}" shlink-admin-auth "${DIR}/web-client-auth-sealedsecret.yaml" \
+  "auth=${AUTH_LINE}"
 
 echo ""
 echo "==> Plaintext backup at ${BACKUP_FILE} — MOVE to your password manager + DELETE."
 echo "==> Admin UI login will be: ${ADMIN_USER} / (see backup file)"
+echo "==> The 4 sealed files are written. Task 4 Step 5 asserts they render."
 ```
 
 - [ ] **Step 5: Run the bootstrap script**
@@ -254,12 +217,22 @@ Expected: four `.yaml` files created in `communication/shortener/`, and `~/.shli
 
 - [ ] **Step 6: Verify exactly four SealedSecrets were produced**
 
-Run:
+A full `kustomize build` cannot run yet — the eight non-secret resources do not
+exist until Task 4 — so assert on the sealed files directly. The render-based
+assertion that `communication/photos/.bootstrap.sh` ends with is added at Task 4
+Step 5, once the kustomization resolves.
+
 ```bash
-grep -l "kind: SealedSecret" communication/shortener/*.yaml | wc -l
-grep -c "creationTimestamp" communication/shortener/*.yaml
+# grep -c over a glob prints one `file:count` line per file and exits 1 when
+# nothing matches, so this uses -l | wc -l instead.
+test "$(grep -l '^kind: SealedSecret' communication/shortener/*.yaml | wc -l)" = 4 \
+  && echo "OK: 4 SealedSecrets" || echo "FAIL: wrong SealedSecret count"
 ```
-Expected: `4`, and no `creationTimestamp` line inside any `template:` block.
+Expected: `OK: 4 SealedSecrets`.
+
+The `creationTimestamp` check is no longer a per-step chore: `scripts/validate-manifests.sh`
+now asserts it repo-wide (step 3 of the gate), so it is covered by every gate run
+from Task 2 onward and by any file sealed outside this script.
 
 - [ ] **Step 7: Move the plaintexts out**
 
@@ -270,7 +243,9 @@ Copy the contents of `~/.shlink-bootstrap-secrets.txt` into the password manager
 `kustomize build` still fails at this point (the eight non-secret files are missing); that is expected and resolved by Task 4.
 
 ```bash
-git add namespaces/namespaces.yaml \
+git add scripts/lib/seal.sh \
+        scripts/validate-manifests.sh \
+        namespaces/namespaces.yaml \
         communication/shortener/kustomization.yaml \
         communication/shortener/.bootstrap.sh \
         communication/shortener/cnd-france-scw-secret.yaml \
@@ -358,7 +333,12 @@ spec:
       memory: "256Mi"
       cpu: 100m
     limits:
-      memory: "256Mi"
+      # 2x the request, not equal to it: an equal limit makes the pod
+      # Guaranteed QoS with zero burst room, and the midnight ScheduledBackup
+      # runs barman-cloud-backup with gzip + S3 buffers inside this same pod.
+      # A hard 256Mi OOMKills there, failing over and forcing a full replica
+      # resync — nightly. photos uses 768Mi; this is the compromise.
+      memory: "512Mi"
 ```
 
 - [ ] **Step 2: Write the scheduled backup**
@@ -421,11 +401,16 @@ metadata:
 spec:
   replicas: 1
   revisionHistoryLimit: 3
+  # Recreate, NOT RollingUpdate. With replicas:1, maxUnavailable:0 forbids
+  # scaling the old pod down before the new one is Ready, so maxSurge:1 would
+  # guarantee two Shlink pods run concurrently on every rollout — the exact
+  # multi-instance state a single replica exists to avoid. The entrypoint runs
+  # `shlink-installer init` (migrations) on every start and its locks live in
+  # the pod-local data/locks dir, so the new pod would migrate the schema while
+  # the old pod still serves traffic against the pre-migration one. Same
+  # reasoning as communication/photos/museum.yaml.
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: shlink
@@ -509,9 +494,16 @@ spec:
               cpu: 100m
               memory: 256Mi
             limits:
+              # cpu limit set because .polaris.yaml scores cpuLimitsMissing;
+              # website/deployment.yaml is the precedent.
+              cpu: 500m
               memory: 512Mi
           securityContext:
             allowPrivilegeEscalation: false
+            # The image already runs as UID 1001 (verified from its registry
+            # config), so this is free — but polaris scores the manifest, not
+            # the image, and without it runAsRootAllowed is reported.
+            runAsNonRoot: true
             # The entrypoint creates data/cache, data/locks, data/log,
             # data/proxies and data/temp-geolite under /etc/shlink.
             readOnlyRootFilesystem: false
@@ -683,18 +675,23 @@ spec:
               cpu: 10m
               memory: 32Mi
             limits:
+              cpu: 100m
               memory: 64Mi
           securityContext:
             allowPrivilegeEscalation: false
+            # Image runs as UID 101 (verified from its registry config).
+            runAsNonRoot: true
             # The entrypoint writes servers.json into the nginx document root.
             readOnlyRootFilesystem: false
             capabilities:
               drop:
                 - ALL
-              add:
-                - CHOWN
-                - SETGID
-                - SETUID
+              # No `add:` list. website-staging/deployment.yaml adds CHOWN,
+              # SETGID and SETUID, but it pairs them with a pod-level
+              # securityContext of runAsNonRoot:false + fsGroup:0 — i.e. it runs
+              # as root, where added capabilities mean something. This image
+              # runs as UID 101, so added capabilities are stripped from the
+              # effective set at exec and would be pure decoration.
 ```
 
 - [ ] **Step 2: Write the web client Service**
@@ -768,15 +765,35 @@ spec:
 
 Run:
 ```bash
-kustomize build communication/shortener | grep -c "^kind:"
+kustomize build communication/shortener | grep '^kind:' | sort | uniq -c
 ```
-Expected: `12` — four SealedSecrets, Cluster, ScheduledBackup, two Deployments, two Services, two Ingresses.
+Expected, by kind rather than a single magic number that any future addition breaks:
+
+```
+      2 kind: Deployment
+      2 kind: Ingress
+      2 kind: Service
+      1 kind: Cluster
+      1 kind: ScheduledBackup
+      4 kind: SealedSecret
+```
+
+The SealedSecret line is the deferred half of Task 1 Step 6 — it is the assertion
+`communication/photos/.bootstrap.sh` ends with, and it catches a kubeseal run that
+wrote valid YAML of the wrong kind or a file the kustomization does not list.
 
 - [ ] **Step 5: Run the full repository gate**
 
 Run: `./scripts/validate-manifests.sh`
 
-Expected: `==> All gates passed`. If polaris reports a `danger`, fix the manifest — do not add an exemption to `.polaris.yaml`; the file's own rules of engagement say to fix rather than exempt.
+Expected: `==> All gates passed`, including the new step-3 SealedSecret hygiene check.
+If polaris reports a `danger`, fix the manifest — do not add an exemption to
+`.polaris.yaml`; the file's own rules of engagement say to fix rather than exempt.
+
+Polaris will still report `notReadOnlyRootFilesystem` twice, which is expected and
+explained in the manifests. It must **not** report `cpuLimitsMissing` or
+`runAsRootAllowed` — both containers now set a cpu limit and `runAsNonRoot: true`.
+If either appears, a securityContext or limits block was dropped.
 
 - [ ] **Step 6: Commit**
 
@@ -816,9 +833,19 @@ spec:
   path: ./communication/shortener
   dependsOn:
     - name: cnd-operators
+    # photos.yaml omits this, but every object here lands in a namespace owned
+    # by the cnd-namespaces Kustomization. Without the edge, a first reconcile
+    # that wins the race fails with `namespaces "cnd-shortener" not found` and
+    # stays NotReady until the next 2m pass.
+    - name: cnd-namespaces
   sourceRef:
     kind: GitRepository
     name: customer
+  # Without an explicit timeout Flux uses the interval (2m), which is shorter
+  # than a first-time reconcile: two CNPG instances, their PVCs, initdb, then
+  # Shlink's startup migrations. The health checks below would report a timeout
+  # that reads as a real failure.
+  timeout: 10m0s
   healthChecks:
     - apiVersion: apps/v1
       kind: Deployment
@@ -834,11 +861,20 @@ spec:
       namespace: cnd-shortener
 ```
 
-- [ ] **Step 2: Run the gate once more**
+- [ ] **Step 2: Validate the Flux Kustomization**
 
-Run: `./scripts/validate-manifests.sh`
+`./scripts/validate-manifests.sh` does **not** cover this file: it discovers work
+with `find . -name kustomization.yaml`, and `clusters/k8s-cndfrance-prod/` holds
+bare Flux YAML with no kustomization.yaml. Re-running it here would re-render the
+same 12 kustomizations as Task 4 Step 5 and prove nothing about the file just
+written. The kubeconform Dagger module in CI is what actually schema-checks it.
 
-Expected: `==> All gates passed`.
+Run a cheap local parse instead, then rely on CI:
+```bash
+kubectl --context k8s-cndfrance-prod apply --dry-run=client \
+  -f clusters/k8s-cndfrance-prod/shortener.yaml
+```
+Expected: `kustomization.kustomize.toolkit.fluxcd.io/cnd-shortener created (dry run)`.
 
 - [ ] **Step 3: Commit and open the PR**
 
@@ -860,7 +896,14 @@ Design: docs/superpowers/specs/2026-08-13-url-shortener-design.md
 Plan: docs/superpowers/plans/2026-08-13-url-shortener.md"
 ```
 
-- [ ] **Step 4: Wait for reconciliation after merge**
+- [ ] **Step 4: Get the PR reviewed and merged**
+
+Branch protection requires one approving review. Nothing below this line can run
+until the PR is merged and Flux has reconciled — do not proceed to Step 5 while
+the PR is still open, or every `kubectl` call returns `NotFound` and reads as a
+failure of the plan rather than of the sequencing.
+
+- [ ] **Step 5: Wait for reconciliation**
 
 Run:
 ```bash
@@ -887,13 +930,23 @@ curl -sS -X POST https://s.cloudnativedays.fr/rest/v3/short-urls \
 ```
 Expected: `https://s.cloudnativedays.fr/test`
 
-- [ ] **Step 7: Acceptance — the redirect works**
+- [ ] **Step 8: Acceptance — the redirect works, and records a visit**
 
-Run: `curl -sSI https://s.cloudnativedays.fr/test | head -5`
+**Must be a GET, not a HEAD.** Shlink refuses to track HEAD requests:
+`module/Core/src/Visit/RequestTracker.php::shouldTrackRequest()` opens with
+`if ($forwardedMethod === self::METHOD_HEAD) { return false; }`, and Mezzio's
+`ImplicitHeadMiddleware` sets that attribute. `curl -I` would therefore return a
+correct-looking 302 while writing no visit row, and Step 9 below would then find
+an empty list — which reads deceptively like "no IP stored, privacy works".
 
+Run, sending a referrer so Step 9 has something to assert on:
+```bash
+curl -sS -o /dev/null -D- -H 'Referer: https://example.com' \
+  https://s.cloudnativedays.fr/test | head -5
+```
 Expected: `HTTP/2 302` with `location: https://cloudnativedays.fr`.
 
-- [ ] **Step 8: Acceptance — the privacy configuration took effect**
+- [ ] **Step 9: Acceptance — the privacy configuration took effect**
 
 This is the acceptance test for the design's central claim, not a nicety.
 
@@ -903,7 +956,11 @@ curl -sS -H "X-Api-Key: $KEY" \
   "https://s.cloudnativedays.fr/rest/v3/short-urls/test/visits" \
   | jq '.visits.data[0]'
 ```
-Expected: a visit object whose `visitLocation` is `null` and whose `userAgent` is empty, with no IP address anywhere in the payload. The `referer` field is present (it will be `null` for a direct curl — re-run the redirect with `-H 'Referer: https://example.com'` and confirm that value comes back, proving referrer tracking is still on).
+Expected: **a non-null visit object** — if it is `null`, Step 8 was run as a HEAD
+and nothing was tracked; re-run it as a GET before reading anything into this
+result. The object must show `visitLocation: null`, an empty `userAgent`, no IP
+address anywhere in the payload, and `referer: "https://example.com"` — the last
+of which proves referrer tracking is still on rather than everything being off.
 
 - [ ] **Step 9: Acceptance — the admin UI**
 
@@ -924,21 +981,43 @@ Store the printed key in the password manager.
 - [ ] **Step 11: Clean up the test link**
 
 ```bash
-curl -sS -X DELETE https://s.cloudnativedays.fr/rest/v3/short-urls/test -H "X-Api-Key: $KEY"
+# -sS prints nothing for a 204 AND nothing for a 401/404, so without -w this
+# step passes whether the delete worked or the key was wrong.
+curl -sS -X DELETE -o /dev/null -w '%{http_code}\n' \
+  https://s.cloudnativedays.fr/rest/v3/short-urls/test -H "X-Api-Key: $KEY"
+curl -sS -o /dev/null -w '%{http_code}\n' https://s.cloudnativedays.fr/test
 ```
-Expected: HTTP 204, and `curl -sSI https://s.cloudnativedays.fr/test` now returns 404.
+Expected: `204`, then `404`.
 
-- [ ] **Step 12: Confirm the first backup**
+- [ ] **Step 12: Confirm backups work — now, not at midnight**
 
-After the first midnight run:
+This is the only check that proves the Scaleway credentials resealed in Task 1
+actually authenticate against `s3://cloudnativedaysfr/cnpg/shlink`. Waiting for
+the scheduled run means up to 24h of blind time, and a wrong key or path then
+costs a second overnight cycle to re-verify. Trigger one immediately:
+
+```bash
+kubectl --context k8s-cndfrance-prod cnpg backup cnpg-shlink -n cnd-shortener
+kubectl --context k8s-cndfrance-prod -n cnd-shortener get backups -w
+```
+Expected: phase reaches `completed` within a few minutes. If the plugin is not
+installed, apply a one-off `Backup` CR referencing `cluster.name: cnpg-shlink`.
+
+Then, the morning after, confirm the *schedule* also fires:
 ```bash
 kubectl --context k8s-cndfrance-prod -n cnd-shortener get backups
 ```
-Expected: a `Backup` for `cnpg-shlink` with phase `completed`.
+Expected: a second, scheduled `Backup` with phase `completed`.
 
 ---
 
 ### Task 6: Document the component
+
+**Do this before Task 5 Step 3 (`gh pr create`), not after.** Neither file depends on
+anything in Tasks 4–5 — no UUID, no cluster state — so leaving it until last forces a second
+PR and a second review round-trip on the same repo for two text files, and lands the
+operational caveats days after people start reading the dashboard. Both commits belong in
+the same PR; the task is numbered 6 only because it reads better after the manifests.
 
 **Files:**
 - Create: `communication/shortener/README.md`
@@ -1006,14 +1085,15 @@ kubectl -n cnd-shortener exec deploy/shlink -- bin/cli api-key:generate --name=<
 
 - [ ] **Step 2: Add the domain to the root README**
 
-In `README.md`, insert a line directly after line 8 (`- 💬 **communication**: Services for
-event communication (e.g., Mattermost)`) and before line 9 (`- **operators**: …`):
+In `README.md`, insert immediately **after the `- 💬 **communication**:` line** (a
+content anchor, not a line number — the sibling analytics plan edits the same
+list, so absolute line numbers go stale the moment either branch merges):
 
 ```markdown
 - 🔗 **communication/shortener**: Self-hosted URL shortener (Shlink) serving `s.cloudnativedays.fr`
 ```
 
-Leave the stale Mattermost reference on line 8 alone — it is unrelated to this change.
+Leave the stale Mattermost reference on that line alone — it is unrelated here.
 
 - [ ] **Step 3: Commit**
 
@@ -1026,7 +1106,23 @@ git commit -m "docs(shortener): document the shortener component"
 
 ## Rollback
 
-If the shortener misbehaves after merge, deleting `clusters/k8s-cndfrance-prod/shortener.yaml`
-and pushing removes the Flux Kustomization; `prune: true` then removes every object it owns,
-including the CNPG cluster. The PVCs use `node-local-retain`, so data survives; the S3
-backups are untouched by pruning and retain for 90 days.
+Deleting `clusters/k8s-cndfrance-prod/shortener.yaml` and pushing removes the Flux
+Kustomization; `prune: true` then removes every object it owns, including the CNPG cluster.
+The S3 backups are untouched by pruning and retain for 90 days.
+
+Two things this does **not** do, both of which bite during an actual rollback:
+
+- **The PVCs do not simply survive.** CNPG's PVCs carry ownerReferences to the `Cluster`, so
+  the API server cascade-deletes them when the Cluster goes. With a Retain reclaim policy the
+  *PVs* survive, but they land in `Released` with a stale `claimRef` that blocks re-binding
+  until someone clears `spec.claimRef` on each one — and because the class is node-local,
+  each PV is pinned to the node that provisioned it, so a re-created cluster may not even be
+  schedulable there. Recovery is a manual procedure, not an automatic one.
+- **Re-deploying onto the same S3 prefix fails.** A fresh cluster with the same name has a new
+  system identifier and timeline, so CNPG's first-WAL-archive check rejects the non-empty
+  `s3://cloudnativedaysfr/cnpg/shlink` prefix and continuous archiving never becomes healthy —
+  leaving the restored shortener running with no backups and the Flux health check never
+  Ready. On re-deploy, either purge the prefix or move to `…/cnpg/shlink-2`.
+
+If the intent is to restore rather than to discard, use CNPG's `bootstrap.recovery` against
+the existing barman store instead of re-running `initdb`.

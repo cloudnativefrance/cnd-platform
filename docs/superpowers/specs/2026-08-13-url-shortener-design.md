@@ -54,8 +54,11 @@ platform, with:
   no Valkey.
 - **No external-dns.** DNS records are created manually, as recorded in the
   website-staging and Ente specs. Two A records are a manual prerequisite here too.
-- **Shlink 4.0+ runs as a non-root user** by default, so no `-non-root` tag suffix and no
-  `securityContext` gymnastics are required.
+- **Shlink 4.0+ runs as a non-root user** by default, so no `-non-root` tag suffix is
+  required. Both images use numeric users — Shlink 1001, the web client 101, read from their
+  registry configs — which is what lets `runAsNonRoot: true` be set without also pinning
+  `runAsUser`. It must still be set explicitly: polaris scores the manifest, not the image,
+  so relying on the image's default is what makes `runAsRootAllowed` fire.
 
 ## Architecture
 
@@ -154,15 +157,28 @@ string. No IP address, no user agent, no location. This is the deliberate answer
 Readiness uses `/rest/health`; liveness uses a TCP socket check on port 8080, so a CNPG
 failover degrades readiness (traffic stops being routed) without triggering restarts.
 
-| Container | CPU req | Mem req | Mem limit |
-|---|---|---|---|
-| `shlink` (PHP + RoadRunner) | 100m | 256Mi | 512Mi |
-| `shlink-web-client` (nginx, static) | 10m | 32Mi | 64Mi |
-| `cnpg-shlink` ×2 | 100m | 256Mi | 256Mi |
+| Container | CPU req | CPU limit | Mem req | Mem limit |
+|---|---|---|---|---|
+| `shlink` (PHP + RoadRunner) | 100m | 500m | 256Mi | 512Mi |
+| `shlink-web-client` (nginx, static) | 10m | 100m | 32Mi | 64Mi |
+| `cnpg-shlink` ×2 | 100m | — | 256Mi | 512Mi |
 
-Roughly 800Mi and 310m requested in total, capping at 1.1Gi. The Shlink figures are an estimate for a
+Roughly 800Mi and 310m requested, capping at 1.6Gi. The Shlink figures are an estimate for a
 RoadRunner worker pool at this traffic level; revisit after a week of real usage rather
 than guessing harder now.
+
+Two deliberate choices in that table:
+
+- **CPU limits are set** because `.polaris.yaml` scores `cpuLimitsMissing`, and
+  `website/deployment.yaml` is the in-repo precedent. Without them the component adds
+  warnings it claims not to.
+- **The CNPG memory limit is 2× its request**, not equal to it. Equal values make the pod
+  Guaranteed QoS with no burst room, and the midnight `ScheduledBackup` runs
+  `barman-cloud-backup` with gzip compression and S3 upload buffers inside that same pod —
+  plus `pg_basebackup` whenever the replica resyncs. The first spike past a hard 256Mi is an
+  immediate OOMKill, then a failover, then a full resync, nightly. `communication/photos`
+  sizes the same shape at 768Mi; 512Mi is the compromise between that and this cluster's
+  documented capacity pressure (`88a8b26`).
 
 ## Secrets and bootstrap
 
@@ -197,18 +213,27 @@ only control in front of an admin-scoped key. Two rules follow:
 | Failure | Behaviour | Mitigation |
 |---|---|---|
 | Postgres unavailable | Redirects 503; readiness fails, liveness holds | CNPG 2 instances, automatic failover |
-| Rollout / node drain | Seconds of redirect downtime (single replica) | Accepted trade-off; `maxSurge: 1`, `maxUnavailable: 0` |
-| Migration on start | `shlink-installer init` runs every boot, idempotent | Single replica removes any concurrent-migration race |
+| Rollout / node drain | Seconds of redirect downtime (single replica) | Accepted trade-off; `strategy: Recreate` is what makes it seconds rather than a race |
+| Migration on start | `shlink-installer init` runs every boot, idempotent | `strategy: Recreate` — see below |
 | Unknown short code | Shlink returns 404 | `TRACK_ORPHAN_VISITS: "false"` keeps the visits table clean |
 | API key lost | No admin access | `kubectl exec` → `bin/cli api-key:generate` |
 | Admin UI credential leak | Attacker can mint/delete links | Rotate htpasswd + API key; redirects themselves are unaffected |
 
 ### Accepted trade-offs
 
-- **Single replica.** Multi-replica Shlink needs Valkey for shared locks. Given the cluster's
-  resource history (`88a8b26`) and the traffic profile, a Valkey deployment is not worth a
-  few seconds of rollout downtime. Revisit if short links go onto printed material where an
-  outage is costlier.
+- **Single replica, with `strategy: Recreate`.** Multi-replica Shlink needs Valkey for shared
+  locks. Given the cluster's resource history (`88a8b26`) and the traffic profile, a Valkey
+  deployment is not worth a few seconds of rollout downtime. Revisit if short links go onto
+  printed material where an outage is costlier.
+
+  The strategy is load-bearing, not incidental. `replicas: 1` alone does **not** mean one pod:
+  with the default RollingUpdate plus `maxUnavailable: 0`, Kubernetes must start the new pod
+  before terminating the old one, so every rollout runs two Shlink pods concurrently — each
+  executing `shlink-installer init` against the same database, with locks in a pod-local
+  `data/locks` directory. That is precisely the concurrent-migration race a single replica is
+  chosen to avoid, and it would have been reintroduced by the very field meant to prevent
+  downtime. `communication/photos/museum.yaml` reached the same conclusion for the same
+  reason.
 - **No geolocation.** Chosen, not a limitation. Re-enabling means a MaxMind account,
   `GEOLITE_LICENSE_KEY` as a fifth secret, and `DISABLE_IP_TRACKING: "false"` — which
   changes the privacy story and would want a notice.
@@ -221,11 +246,18 @@ Manifest gate — the repository's existing single entry point, unchanged:
 ./scripts/validate-manifests.sh    # kustomize render → polaris audit
 ```
 
-Expected polaris outcome: both containers set `allowPrivilegeEscalation: false`, resources
-and probes, so neither adds to the warning pile documented in `.polaris.yaml`.
-`readOnlyRootFilesystem` stays `false` — the entrypoint does
-`mkdir -p data/cache data/locks data/log data/proxies data/temp-geolite` under `/etc/shlink` —
-which the config scores as `warning`, not `danger`.
+Expected polaris outcome, measured by rendering these manifests and running the gate rather
+than assumed: **two `notReadOnlyRootFilesystem` warnings and nothing else.**
+`readOnlyRootFilesystem` stays `false` because the entrypoint does
+`mkdir -p data/cache data/locks data/log data/proxies data/temp-geolite` under `/etc/shlink`,
+and the web client writes `servers.json` into its nginx root — the config scores that
+`warning`, not `danger`.
+
+An earlier draft of this document claimed the component added *no* warnings. That was wrong:
+polaris scores the manifest, not the image, so `cpuLimitsMissing` and `runAsRootAllowed` were
+each reported twice even though both images already run as non-root (UID 1001 and 101,
+verified from their registry configs). Both are now set explicitly, which is what makes the
+claim above true.
 
 ## Acceptance criteria
 
@@ -238,13 +270,20 @@ Post-deploy, each verified by running the command and reading the output:
      -H "X-Api-Key: $KEY" -H 'Content-Type: application/json' \
      -d '{"longUrl":"https://cloudnativedays.fr","customSlug":"test"}'
    ```
-3. `curl -sSI https://s.cloudnativedays.fr/test` → `302` with `Location: https://cloudnativedays.fr`.
+3. A **GET** of `https://s.cloudnativedays.fr/test` returns `302` with
+   `Location: https://cloudnativedays.fr`. It must not be a HEAD: `RequestTracker.php`
+   returns `false` from `shouldTrackRequest()` when the forwarded method is HEAD, so
+   `curl -I` would return a correct-looking 302 while recording no visit — and criterion 5
+   would then read an empty list as proof that privacy works.
 4. `https://links.cloudnativedays.fr` prompts for basic auth, and after authenticating shows
    the CND France server already configured, with the `test` link listed.
-5. **The privacy configuration demonstrably took effect**: the visit recorded in step 3 shows
-   a referrer field and no IP address and no location in the UI. This is the acceptance
-   test for the design's central claim, not a nicety.
-6. A `Backup` object for `cnpg-shlink` reaches `completed` after the first scheduled run.
+5. **The privacy configuration demonstrably took effect**: the visit recorded in criterion 3
+   exists (non-null), carries the referrer that request sent, and shows no IP address and no
+   location. This is the acceptance test for the design's central claim, not a nicety — and
+   a null visit means criterion 3 was run wrong, not that the privacy config is working.
+6. A `Backup` object for `cnpg-shlink` reaches `completed` — triggered on demand right after
+   rollout, not left until midnight, since it is the only proof the resealed Scaleway
+   credentials authenticate against the backup path.
 
 ## Out of scope
 
