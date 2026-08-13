@@ -6,8 +6,19 @@ Audience measurement for `cloudnativedays.fr`, self-hosted at
 ## What it measures
 
 Pageviews, top pages, referrers, visitors per day. Nothing else — no events, no funnels,
-no campaign reporting. Umami is cookieless and stores no personal data; a visitor is a
+no campaign reporting. Umami is cookieless and does not store the raw IP; a visitor is a
 server-side salted hash.
+
+**It records more than "just pageviews", so do not describe it as such.** Verified against
+the running instance, each session row holds: page, timestamp, referrer, **country**,
+**browser, OS, device type, screen size and language**. The image ships a bundled 65MB
+`GeoLite2-City.mmdb`, so geolocation is on by default and needs no MaxMind account — the
+opposite of Shlink — and `getClientInfo()` always derives browser/OS/device from the
+User-Agent with no env var to disable it. `DISABLE_IP_TRACKING` / `DISABLE_UA_TRACKING` are
+**Shlink** settings; Umami has no equivalent.
+
+The raw IP is genuinely not persisted: it is used transiently for the country lookup and to
+compute the hashed session id.
 
 ## Reading the numbers honestly
 
@@ -51,6 +62,7 @@ Barman Cloud Plugin as a single platform-wide task before the operator reaches 1
 
 ## Privacy
 
-Cookieless, no personal data, DNT honoured, telemetry disabled. That is what makes operating
+Cookieless, no raw IP persisted, DNT honoured, telemetry disabled — but country and device
+characteristics ARE recorded (see above). That is the basis for operating
 without a consent banner defensible for audience measurement — confirm the approach with
 whoever owns the site's legal pages, and keep the privacy page's analytics mention accurate.

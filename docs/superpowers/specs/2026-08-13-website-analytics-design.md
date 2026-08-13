@@ -242,19 +242,26 @@ attributes anywhere.
 
 ## Privacy posture
 
-Umami is cookieless and stores no personal data — a visitor is a server-side salted hash,
-rotated. Nothing in this deployment writes a client-side identifier.
+> **Correction (verified post-deploy).** An earlier version of this section claimed Umami
+> stores no personal data at all. Measured against the running instance, a session row holds
+> page, timestamp, referrer, **country**, **browser, OS, device type, screen size and
+> language**. The image bundles a 65MB `GeoLite2-City.mmdb`, so geolocation is on by default
+> and needs no MaxMind account — the opposite of Shlink — and `getClientInfo()` always derives
+> browser/OS/device from the User-Agent with no switch. `DISABLE_IP_TRACKING` and
+> `DISABLE_UA_TRACKING` are **Shlink** env vars and have no Umami equivalent; assuming they
+> transferred is what produced the wrong claim.
 
-That property is what makes operating without a consent banner defensible for audience
-measurement under CNIL guidance. **This document states a technical property; it is not
-legal advice.** Two follow-ups belong to whoever owns the site's legal pages
-(`src/layouts/LegalPageLayout.astro` exists in the website repo):
+What is true: Umami sets no cookies, and the raw IP is not persisted — it is used transiently
+to derive the country and to compute a hashed session identifier.
 
-- **Add an analytics mention to the privacy page** naming the tool, what is collected, and
-  that it is self-hosted. This is *not* left unowned: it ships as a step in the plan's Task 5,
-  in the same PR as the tracker tag, so the two cannot diverge.
+That is a weaker basis for a no-consent-banner posture than "no personal data", so the legal
+confirmation below is load-bearing rather than a formality. Two follow-ups:
+
+- **The privacy page now lists exactly what is recorded**, in both languages, and ships in the
+  same PR as the tracker tag (cloudnativefrance/website#45).
 - **Confirm the no-banner approach for this configuration.** A human prerequisite that blocks
-  production promotion (plan Task 5 Step 9), not an open-ended note.
+  production promotion. CNIL's audience-measurement exemption has specific criteria; country
+  plus device characteristics is a materially different question from "nothing at all".
 
 `DISABLE_TELEMETRY: "1"` stops the instance reporting its own usage upstream.
 
