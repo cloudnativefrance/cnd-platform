@@ -43,10 +43,10 @@ Commits stay local until Task 5 Step 3, which pushes and opens the PR in one go.
 - Every container sets `allowPrivilegeEscalation: false`, `runAsNonRoot: true`, CPU **and** memory requests, a CPU limit, and both probes. Polaris scores the *manifest*, not the image, so "the image already runs as non-root" does not satisfy `runAsRootAllowed` — an earlier draft made exactly that mistake. The only warnings this component may add are the two `notReadOnlyRootFilesystem` ones, which are explained in the manifests.
 - `readOnlyRootFilesystem: false` on both containers. The Shlink entrypoint does `mkdir -p data/cache data/locks data/log data/proxies data/temp-geolite` under `/etc/shlink`; the web client writes `servers.json` into its nginx root.
 - `GEOLITE_LICENSE_KEY` is never set. The entrypoint passes `--skip-download-geolite` when it is empty; setting it would require a MaxMind account for a disabled feature.
-- Secrets are Bitnami SealedSecrets, sealed via `scripts/lib/seal.sh`, which strips `creationTimestamp: null` from `spec.template.metadata` (kubeconform in CI rejects it there). Only the nested occurrence is stripped — the top-level one is harmless and present on several SealedSecrets already on main.
+- Secrets are Bitnami SealedSecrets. The bootstrap strips `creationTimestamp: null` from `spec.template.metadata` (kubeconform in CI rejects it there), and `scripts/validate-manifests.sh` asserts the same thing repo-wide — `sed` exits 0 when it matches nothing, so the gate is the real guarantee. Only the nested occurrence is stripped; the top-level one is harmless and present on several SealedSecrets already on main.
 - Ingress: `ingressClassName: public`, `cert-manager.io/cluster-issuer: letsencrypt`.
 - Commit messages and PR text in English; never add co-author or generated-by trailers.
-- **`scripts/lib/seal.sh` already exists** — it ships in this PR alongside the plan. The bootstrap script sources it rather than re-deriving the seal/reseal/strip sequence, which was on its way to a third verbatim copy. Do not inline those mechanics again; extend the helper instead.
+- The bootstrap is **self-contained**, matching `communication/photos/.bootstrap.sh`, so this PR merges independently of PR #160. The duplication against the sibling bootstraps is a knowingly accepted cost of that independence; a fix made in one should be grepped for in the others.
 - **`scripts/validate-manifests.sh` now has a third gate step** asserting no `creationTimestamp: null` inside a SealedSecret template, repo-wide. This repo shipped that exact failure to main twice (`27b235b`, `6c61223`) because the local gate had no opinion about it and only CI did.
 
 ## Prerequisites (human, before Task 1)
@@ -129,36 +129,60 @@ Create `communication/shortener/.bootstrap.sh` and `chmod +x` it:
 # Plaintexts are stashed in a 0600 file you must move to your password manager
 # and then delete.
 #
-# The seal/strip/reseal mechanics live in scripts/lib/seal.sh so this script
-# only expresses what is specific to the shortener. See that file for why.
+# Structure follows communication/photos/.bootstrap.sh deliberately: each
+# component's bootstrap is self-contained so its PR can merge independently of
+# any other. The cost is real — the reseal block and the creationTimestamp
+# workaround now exist in more than one place — and is accepted knowingly. If a
+# kubeseal or kubeconform quirk is ever fixed here, grep the other
+# .bootstrap.sh files for the same code.
 #
 # Manual prereqs (do these BEFORE running this script):
 #   1. Two DNS A records pointing at the cluster ingress:
 #        s.cloudnativedays.fr
 #        links.cloudnativedays.fr
-#   2. `kubectl config use-context k8s-cndfrance-prod` — the script refuses to
-#      run on any other context, because kubeseal would seal against the wrong
-#      cluster.
+#   2. `kubectl config use-context k8s-cndfrance-prod`. kubeseal fetches the
+#      sealing certificate from the CURRENT context regardless of what
+#      --context is passed to kubectl, so sealing on the wrong context yields
+#      files that pass kustomize, kubeconform and CI, and fail only after
+#      reconcile with "no key could decrypt secret" — by which point the
+#      plaintexts have usually been deleted.
 
 set -euo pipefail
 trap 'echo "ERROR: bootstrap failed at line $LINENO" >&2' ERR
 
-source "$(git rev-parse --show-toplevel)/scripts/lib/seal.sh"
-
+CTX="k8s-cndfrance-prod"
 NS="cnd-shortener"
+SOURCE_NS="cnd-project"   # where the existing Scaleway secret lives
 ADMIN_USER="cnd"
+
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKUP_FILE="$HOME/.shlink-bootstrap-secrets.txt"
 
 echo "==> Bootstrapping Shlink SealedSecrets in namespace ${NS}"
 
-require_bins openssl kubeseal kubectl jq kustomize
-require_context
+for bin in openssl kubeseal kubectl jq kustomize; do
+  command -v "$bin" >/dev/null || { echo "ERROR: $bin not found on PATH" >&2; exit 1; }
+done
+
+CURRENT_CTX="$(kubectl config current-context)"
+if [[ "${CURRENT_CTX}" != "${CTX}" ]]; then
+  echo "ERROR: current context is '${CURRENT_CTX}', expected '${CTX}'." >&2
+  echo "       kubeseal would seal against the wrong cluster. Run:" >&2
+  echo "         kubectl config use-context ${CTX}" >&2
+  exit 1
+fi
+
+# Everything below writes plaintext at some point. 0600 from creation, rather
+# than a chmod after a redirect has already created the file world-readable.
+umask 077
 
 # ---------- Generate plaintexts ----------
+# hex, not base64: these values end up in URLs and htpasswd lines, where '/',
+# '+' and '=' cause trouble. Hex is safe by construction, so there is no hazard
+# to check for afterwards. 32 bytes = 128 bits.
 echo "==> Generating secrets"
-PG_PASSWORD="$(url_safe_password)"
-ADMIN_PASSWORD="$(url_safe_password 12)"
+PG_PASSWORD="$(openssl rand -hex 32)"
+ADMIN_PASSWORD="$(openssl rand -hex 12)"
 
 # Shlink accepts any string as an API key; a UUID is the upstream convention.
 if command -v uuidgen >/dev/null; then
@@ -171,10 +195,7 @@ fi
 # dependency on apache2-utils.
 AUTH_LINE="${ADMIN_USER}:$(openssl passwd -apr1 -stdin <<< "${ADMIN_PASSWORD}")"
 
-# ---------- Snapshot plaintexts to a file the user MUST move ----------
-# secure_file creates it 0600 before anything is written, rather than chmod-ing
-# a world-readable file after the fact.
-secure_file "${BACKUP_FILE}"
+install -m 600 /dev/null "${BACKUP_FILE}"
 {
   echo "# Shlink bootstrap secrets — generated $(date -Iseconds)"
   echo "# MOVE these to a password manager and DELETE this file."
@@ -186,27 +207,82 @@ secure_file "${BACKUP_FILE}"
 } > "${BACKUP_FILE}"
 echo "    Plaintexts written to ${BACKUP_FILE} (mode 600)."
 
-# ---------- Seal ----------
+# ---------- Reseal Scaleway creds ----------
+# Read once, extract three times — not three kubectl calls.
+echo "==> Reading Scaleway creds from namespace ${SOURCE_NS}"
+SCW_DATA="$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret cnd-france-scw-secret -o json)"
+SCW_ACCESS_KEY_ID="$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @base64d')"
+SCW_SECRET_ACCESS_KEY="$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')"
+SCW_REGION="$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')"
+
 echo "==> Resealing cnd-france-scw-secret for ${NS}"
-reseal_scw_secret "${NS}" "${DIR}/cnd-france-scw-secret.yaml"
+kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
+  --namespace "${NS}" \
+  --from-literal=access-key-id="${SCW_ACCESS_KEY_ID}" \
+  --from-literal=secret-access-key="${SCW_SECRET_ACCESS_KEY}" \
+  --from-literal=region="${SCW_REGION}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/cnd-france-scw-secret.yaml"
 
+# ---------- Database credentials ----------
+# CNPG expects kubernetes.io/basic-auth with username + password.
 echo "==> Sealing shlink-cnpg-secret"
-seal_basic_auth "${NS}" shlink-cnpg-secret "${DIR}/shlink-cnpg-secret.yaml" \
-  shlink "${PG_PASSWORD}"
+kubectl --context "${CTX}" create secret generic shlink-cnpg-secret \
+  --namespace "${NS}" \
+  --type kubernetes.io/basic-auth \
+  --from-literal=username=shlink \
+  --from-literal=password="${PG_PASSWORD}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-cnpg-secret.yaml"
 
+# ---------- Shlink initial API key ----------
 echo "==> Sealing shlink-secret (initial API key)"
-seal_literals "${NS}" shlink-secret "${DIR}/shlink-secret.yaml" \
-  "initial-api-key=${API_KEY}"
+kubectl --context "${CTX}" create secret generic shlink-secret \
+  --namespace "${NS}" \
+  --from-literal=initial-api-key="${API_KEY}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-secret.yaml"
 
+# ---------- Admin UI basic auth ----------
 # ingress-nginx requires the data key to be named exactly `auth`.
 echo "==> Sealing shlink-admin-auth (basic auth for the admin UI)"
-seal_literals "${NS}" shlink-admin-auth "${DIR}/web-client-auth-sealedsecret.yaml" \
-  "auth=${AUTH_LINE}"
+kubectl --context "${CTX}" create secret generic shlink-admin-auth \
+  --namespace "${NS}" \
+  --from-literal=auth="${AUTH_LINE}" \
+  --dry-run=client -o yaml \
+| kubeseal --format yaml --namespace "${NS}" > "${DIR}/web-client-auth-sealedsecret.yaml"
+
+# ---------- Strip the templated creationTimestamp ----------
+# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
+# passes it into spec.template.metadata, where the kubeconform Dagger module in
+# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
+# to main twice already: 27b235b, 6c61223.
+#
+# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
+# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
+# it on main with green CI — so removing it too would make these files differ
+# cosmetically from every existing SealedSecret for no reason.
+#
+# sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
+# asserts the same thing repo-wide as a real gate.
+for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
+  sed -i '/^      creationTimestamp: null$/d' "${DIR}/${f}"
+done
+
+# ---------- Validate ----------
+# Non-empty is too weak: a stderr dump or a truncated write also satisfies it.
+# The render-based assertion needs every resource to exist, so it is deferred to
+# Task 4 Step 4; here we assert each file parses as a SealedSecret.
+echo "==> Verifying the four sealed files"
+for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
+  grep -q '^kind: SealedSecret$' "${DIR}/${f}" \
+    || { echo "ERROR: ${DIR}/${f} is not a SealedSecret" >&2; exit 1; }
+done
+echo "    OK: 4 SealedSecrets written"
 
 echo ""
 echo "==> Plaintext backup at ${BACKUP_FILE} — MOVE to your password manager + DELETE."
 echo "==> Admin UI login will be: ${ADMIN_USER} / (see backup file)"
-echo "==> The 4 sealed files are written. Task 4 Step 5 asserts they render."
 ```
 
 - [ ] **Step 5: Run the bootstrap script**
@@ -243,8 +319,7 @@ Copy the contents of `~/.shlink-bootstrap-secrets.txt` into the password manager
 `kustomize build` still fails at this point (the eight non-secret files are missing); that is expected and resolved by Task 4.
 
 ```bash
-git add scripts/lib/seal.sh \
-        scripts/validate-manifests.sh \
+git add scripts/validate-manifests.sh \
         namespaces/namespaces.yaml \
         communication/shortener/kustomization.yaml \
         communication/shortener/.bootstrap.sh \
