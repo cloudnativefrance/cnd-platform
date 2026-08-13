@@ -28,7 +28,7 @@ done
 
 BUNDLE_DIR="${BUNDLE_DIR:-.bundle}"
 
-echo "==> [1/2] Rendering kustomizations into ${BUNDLE_DIR}/"
+echo "==> [1/3] Rendering kustomizations into ${BUNDLE_DIR}/"
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${BUNDLE_DIR}"
 
@@ -49,11 +49,35 @@ done < <(find . -name kustomization.yaml -not -path "*/templates/*" -not -path "
 
 echo "    rendered ${rendered} kustomization(s)"
 
-echo "==> [2/2] polaris audit (workload best practices)"
+echo "==> [2/3] polaris audit (workload best practices)"
 polaris audit \
   --audit-path "${BUNDLE_DIR}" \
   --config .polaris.yaml \
   --set-exit-code-on-danger \
   --only-show-failed-tests
+
+echo "==> [3/3] SealedSecret template hygiene"
+# `creationTimestamp: null` inside spec.template.metadata is rejected by the
+# kubeconform Dagger module in CI (the SealedSecret CRD schema sets
+# additionalProperties: false there). kubectl create --dry-run=client emits it
+# and kubeseal passes it straight through, so every bootstrap script strips it
+# afterwards with sed — and sed exits 0 when it matches nothing.
+#
+# This repo has already shipped that failure to main twice (27b235b, 6c61223).
+# Both times it was caught by CI after a push, because the local gate had no
+# opinion about it. Asserting it here makes the local gate agree with CI.
+#
+# Only the nested occurrence matters: several SealedSecrets on main carry the
+# top-level `metadata.creationTimestamp: null` (ticketing/alfio, callforpapers/
+# pretalx, website-staging) and CI is green on them, so this must not match at
+# the 2-space depth.
+if grep -rn '^      creationTimestamp: null$' --include='*.yaml' \
+     --exclude-dir=.bundle --exclude-dir=.git . ; then
+  echo "" >&2
+  echo "error: 'creationTimestamp: null' found inside a SealedSecret template." >&2
+  echo "       kubeconform rejects it in CI. Remove the lines listed above." >&2
+  exit 1
+fi
+echo "    OK: no templated creationTimestamp"
 
 echo "==> All gates passed"

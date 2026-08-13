@@ -1,0 +1,29 @@
+---
+# Every path on this host is short-code namespace: /<code> redirects, and
+# /rest/* is the API. The admin UI therefore lives on its own host — mounting
+# it here would permanently burn a slug.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shlink
+  namespace: cnd-shortener
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: public
+  rules:
+    - host: s.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: shlink
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - s.cloudnativedays.fr
+      secretName: shlink-tls

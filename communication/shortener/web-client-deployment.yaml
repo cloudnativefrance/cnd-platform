@@ -1,0 +1,88 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shlink-web-client
+  namespace: cnd-shortener
+  labels:
+    app.kubernetes.io/name: shlink-web-client
+    app.kubernetes.io/component: admin-ui
+    app.kubernetes.io/part-of: cnd-france
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shlink-web-client
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shlink-web-client
+        app.kubernetes.io/component: admin-ui
+        app.kubernetes.io/part-of: cnd-france
+    spec:
+      containers:
+        - name: shlink-web-client
+          image: shlinkio/shlink-web-client:4.8.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # These are baked into a servers.json served to the browser, so the
+            # API key IS visible to anyone who loads this page. Upstream:
+            # "use this only when you self-host shlink-web-client, and you know
+            # only trusted people will have access to it." The ingress basic
+            # auth is what makes that true — it is not optional here.
+            - name: SHLINK_SERVER_URL
+              value: https://s.cloudnativedays.fr
+            - name: SHLINK_SERVER_NAME
+              value: CND France
+            - name: SHLINK_SERVER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shlink-secret
+                  key: initial-api-key
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # Image runs as UID 101 (verified from its registry config).
+            runAsNonRoot: true
+            # The entrypoint writes servers.json into the nginx document root.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+              # No `add:` list. website-staging/deployment.yaml adds CHOWN,
+              # SETGID and SETUID, but it pairs them with a pod-level
+              # securityContext of runAsNonRoot:false + fsGroup:0 — i.e. it runs
+              # as root, where added capabilities mean something. This image
+              # runs as UID 101, so added capabilities are stripped from the
+              # effective set at exec and would be pure decoration.

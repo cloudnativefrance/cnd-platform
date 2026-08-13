@@ -1,0 +1,17 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cnd-shortener
+
+resources:
+  - cnd-france-scw-secret.yaml
+  - shlink-cnpg-secret.yaml
+  - shlink-secret.yaml
+  - web-client-auth-sealedsecret.yaml
+  - cnpg-cluster.yaml
+  - cnpg-scheduled-backup.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - web-client-deployment.yaml
+  - web-client-service.yaml
+  - web-client-ingress.yaml

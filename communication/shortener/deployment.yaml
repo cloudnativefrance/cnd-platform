@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shlink
+  namespace: cnd-shortener
+  labels:
+    app.kubernetes.io/name: shlink
+    app.kubernetes.io/component: url-shortener
+    app.kubernetes.io/part-of: cnd-france
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  # Recreate, NOT RollingUpdate. With replicas:1, maxUnavailable:0 forbids
+  # scaling the old pod down before the new one is Ready, so maxSurge:1 would
+  # guarantee two Shlink pods run concurrently on every rollout — the exact
+  # multi-instance state a single replica exists to avoid. The entrypoint runs
+  # `shlink-installer init` (migrations) on every start and its locks live in
+  # the pod-local data/locks dir, so the new pod would migrate the schema while
+  # the old pod still serves traffic against the pre-migration one. Same
+  # reasoning as communication/photos/museum.yaml.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: shlink
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: shlink
+        app.kubernetes.io/component: url-shortener
+        app.kubernetes.io/part-of: cnd-france
+    spec:
+      containers:
+        - name: shlink
+          # Shlink 4.0+ images already run as a non-root user.
+          image: shlinkio/shlink:5.1.5
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: DEFAULT_DOMAIN
+              value: s.cloudnativedays.fr
+            - name: IS_HTTPS_ENABLED
+              value: "true"
+            - name: DB_DRIVER
+              value: postgres
+            - name: DB_HOST
+              value: cnpg-shlink-rw
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: shlink
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: shlink-cnpg-secret
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: shlink-cnpg-secret
+                  key: password
+            # Creates an admin-scoped API key on first boot only.
+            - name: INITIAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: shlink-secret
+                  key: initial-api-key
+            # Privacy posture: a visit row keeps timestamp, short code and
+            # referrer. No IP, no user agent, no location. GEOLITE_LICENSE_KEY
+            # is deliberately unset — the entrypoint then passes
+            # --skip-download-geolite, so no MaxMind account is needed.
+            - name: DISABLE_IP_TRACKING
+              value: "true"
+            - name: DISABLE_UA_TRACKING
+              value: "true"
+            - name: DISABLE_REFERRER_TRACKING
+              value: "false"
+            - name: TRACK_ORPHAN_VISITS
+              value: "false"
+          # /rest/health returns 503 when Postgres is unreachable. That is
+          # correct for readiness (stop routing traffic) but wrong for
+          # liveness — it would restart-loop the pod through a CNPG failover.
+          readinessProbe:
+            httpGet:
+              path: /rest/health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              # cpu limit set because .polaris.yaml scores cpuLimitsMissing;
+              # website/deployment.yaml is the precedent.
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            # The image already runs as UID 1001 (verified from its registry
+            # config), so this is free — but polaris scores the manifest, not
+            # the image, and without it runAsRootAllowed is reported.
+            runAsNonRoot: true
+            # The entrypoint creates data/cache, data/locks, data/log,
+            # data/proxies and data/temp-geolite under /etc/shlink.
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
