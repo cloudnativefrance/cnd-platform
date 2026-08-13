@@ -1,0 +1,37 @@
+---
+# Basic auth gate. The secret is sealed into web-client-auth-sealedsecret.yaml
+# alongside this file; ingress-nginx requires its data key to be named exactly
+# `auth`. This is the only control in front of an admin-scoped API key that the
+# SPA serves to the browser — see web-client-deployment.yaml.
+#
+# cert-manager is unaffected: its HTTP-01 solver uses a separate, more-specific
+# Ingress for /.well-known/acme-challenge/ which does not inherit these
+# annotations.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shlink-web-client
+  namespace: cnd-shortener
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: shlink-admin-auth
+    nginx.ingress.kubernetes.io/auth-realm: "CND France — links"
+spec:
+  ingressClassName: public
+  rules:
+    - host: links.cloudnativedays.fr
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: shlink-web-client
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - links.cloudnativedays.fr
+      secretName: shlink-web-client-tls

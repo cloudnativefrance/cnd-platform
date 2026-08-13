@@ -1,0 +1,37 @@
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: cnd-shortener
+  namespace: flux-system
+spec:
+  prune: true
+  interval: 2m0s
+  path: ./communication/shortener
+  dependsOn:
+    - name: cnd-operators
+    # photos.yaml omits this, but every object here lands in a namespace owned
+    # by the cnd-namespaces Kustomization. Without the edge, a first reconcile
+    # that wins the race fails with `namespaces "cnd-shortener" not found` and
+    # stays NotReady until the next 2m pass.
+    - name: cnd-namespaces
+  sourceRef:
+    kind: GitRepository
+    name: customer
+  # Without an explicit timeout Flux uses the interval (2m), which is shorter
+  # than a first-time reconcile: two CNPG instances, their PVCs, initdb, then
+  # Shlink's startup migrations. The health checks below would report a timeout
+  # that reads as a real failure.
+  timeout: 10m0s
+  healthChecks:
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: shlink
+      namespace: cnd-shortener
+    - apiVersion: apps/v1
+      kind: Deployment
+      name: shlink-web-client
+      namespace: cnd-shortener
+    - apiVersion: postgresql.cnpg.io/v1
+      kind: Cluster
+      name: cnpg-shlink
+      namespace: cnd-shortener
