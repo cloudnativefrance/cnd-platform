@@ -144,8 +144,15 @@ kubectl --context "${CTX}" create secret generic shlink-admin-auth \
 #
 # sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
 # asserts the same thing repo-wide as a real gate.
+# `-i.bak` + rm, not a bare `sed -i`: bare `-i` is GNU-only. On BSD sed (macOS,
+# where this repo is maintained) `-i` takes its suffix as an argument, so the
+# sed script above is swallowed as the suffix and the FILENAME is then parsed
+# as the script — sed fails with "undefined label", the file is left unstripped
+# and the ERR trap aborts the bootstrap here, after the sealed files have
+# already been written. The suffixed form parses identically on both seds.
 for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
-  sed -i '/^      creationTimestamp: null$/d' "${DIR}/${f}"
+  sed -i.bak '/^      creationTimestamp: null$/d' "${DIR}/${f}"
+  rm -f "${DIR}/${f}.bak"
 done
 
 # ---------- Validate ----------

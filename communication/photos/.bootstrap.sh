@@ -141,8 +141,15 @@ kubectl --context "${CTX}" create secret generic museum-secret \
 # kubectl create --dry-run=client emits creationTimestamp: null, and kubeseal
 # passes it through into spec.template.metadata. The repo's kubeconform CI
 # rejects it (additionalProperties not allowed). Same fix as commit 27b235b.
+# `-i.bak` + rm, not a bare `sed -i`: bare `-i` is GNU-only. On BSD sed (macOS,
+# where this repo is maintained) `-i` takes its suffix as an argument, so the
+# sed script above is swallowed as the suffix and the FILENAME is then parsed
+# as the script — sed fails with "undefined label", the file is left unstripped
+# and the ERR trap aborts the bootstrap here, after the sealed files have
+# already been written. The suffixed form parses identically on both seds.
 for f in cnpg-secret.yaml cnd-france-scw-secret.yaml brevo-smtp-secret.yaml museum-secret.yaml; do
-  sed -i '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' "${PHOTOS_DIR}/${f}"
+  sed -i.bak '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' "${PHOTOS_DIR}/${f}"
+  rm -f "${PHOTOS_DIR}/${f}.bak"
 done
 
 # ---------- Validate ----------
