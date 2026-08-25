@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Explicit children, like communication/kustomization.yaml.
+#
+# Without this file Flux generates a kustomization by scanning ./project
+# recursively — unambiguous while baserow was the only child, guesswork now
+# that plane/ joins it. The file existed until OpenProject was removed in
+# 77d1c8d; this restores it rather than inventing a new pattern.
+#
+# cnd-france-scw-secret is listed HERE, not inside a child: it is a
+# namespace-scoped credential that baserow (S3 uploads, CNPG backups) and plane
+# (CNPG backups, doc store) both consume. Leaving it in project/baserow/ meant
+# plane's backups would break if baserow were ever removed. SealedSecrets bind
+# to name+namespace, not to a file path, so moving the file needs no resealing.
+resources:
+  - cnd-france-scw-secret.yaml
+  - baserow
+  - plane

@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cnd-project
+
+# The six SealedSecrets are produced by ./.bootstrap.sh and are NOT in this
+# repo until that script has run — it needs the cluster's sealing certificate.
+# Run it before opening the PR, or `kustomize build` here fails on the missing
+# files (which is the intended signal, not a bug).
+#
+# cnd-france-scw-secret is deliberately absent: it is shared with baserow and
+# is listed one level up, in project/kustomization.yaml.
+#
+# helmrelease.yaml and the two Ingress objects land in a follow-up PR. The
+# migrator Job has backoffLimit 3 and no wait-for-database logic, so shipping
+# it alongside the CNPG cluster risks exhausting those retries before Postgres
+# is Ready and wedging the HelmRelease. Flux's dependsOn cannot reference a
+# CNPG Cluster, so the sequencing is done with two PRs instead.
+resources:
+  - plane-cnpg-secret.yaml
+  - plane-app-secret.yaml
+  - plane-live-secret.yaml
+  - plane-docstore-secret.yaml
+  - plane-rabbitmq-secret.yaml
+  - plane-godmode-auth-secret.yaml
+  - cnpg-cluster.yaml
+  - cnpg-scheduled-backup.yaml
