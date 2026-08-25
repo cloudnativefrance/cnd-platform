@@ -17,6 +17,9 @@ metadata:
     nginx.ingress.kubernetes.io/auth-type: basic
     nginx.ingress.kubernetes.io/auth-secret: plane-godmode-auth
     nginx.ingress.kubernetes.io/auth-realm: "CND France — Plane admin"
+    # Annotations are per-object, so ingress.yaml's cap does not carry here and
+    # /god-mode would otherwise fall back to the controller's 1m default.
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
 spec:
   ingressClassName: public
   rules:

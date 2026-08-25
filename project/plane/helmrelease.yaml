@@ -5,12 +5,27 @@ metadata:
 spec:
   releaseName: plane
   driftDetection:
-    # `warn`, not the `enabled` every other HelmRelease here uses. The chart
-    # stamps `timestamp: {{ now }}` into every pod template
-    # (templates/workloads/*.deployment.yaml), so the rendered manifest differs
-    # on every render. Start by watching what drift detection actually reports
-    # before letting it correct anything.
+    # `warn`, not the `enabled` every other HelmRelease here uses — but NOT for
+    # the reason you might expect. The chart does stamp `timestamp: {{ now }}`
+    # into every pod template, and that is harmless: helm-controller diffs the
+    # manifest STORED in the Helm release secret against the cluster, it does
+    # not re-render the chart, so `now` is frozen identically on both sides.
+    #
+    # The real problem is our own `ttlSecondsAfterFinished` on the migrator Job
+    # below. The TTL controller deletes the completed Job while it is still a
+    # member of the stored manifest, so every reconcile afterwards sees it as
+    # missing and reports drift forever. Under `enabled` that would be worse
+    # than noise: helm-controller would re-create the Job, re-running a full
+    # Django migration, every reconcile until the TTL deletes it again.
+    #
+    # `ignore` scopes the exclusion to that one object, so flipping this to
+    # `enabled` (matching the other four HelmReleases) is safe once the release
+    # has been observed for a while.
     mode: warn
+    ignore:
+      - target:
+          kind: Job
+        paths: ["/"]
   chart:
     spec:
       chart: plane-ce
@@ -33,7 +48,8 @@ spec:
     remediation:
       retries: 3
 
-  # The chart ships three defects that cannot be fixed from values.
+  # Defects in 1.6.3 that cannot be fixed from values. Each entry below says
+  # what it works around; only the WEB_URL one has an upstream exit condition.
   postRenderers:
     - kustomize:
         patches:
@@ -43,38 +59,55 @@ spec:
           # pressure. This cluster has a documented history of exactly that
           # (88a8b26, and ~6 OOMKill fixes across pretalx and baserow), and a
           # evicted RabbitMQ stalls every Celery task Plane has.
-          - target:
+          # Targeted by strategic-merge WITHOUT a `target:` block on purpose:
+          # kustomize then derives the target from the patch's own kind+name and
+          # hard-errors if nothing matches. A JSON-6902 `target:` that matches
+          # nothing is silently ignored (exit 0), so on a chart bump that renames
+          # these StatefulSets both would quietly revert to BestEffort and the
+          # release would still report Ready.
+          - patch: |
+              apiVersion: apps/v1
               kind: StatefulSet
-              name: plane-redis-wl
-            patch: |
-              - op: add
-                path: /spec/template/spec/containers/0/resources
-                value:
-                  requests:
-                    cpu: 50m
-                    memory: 128Mi
-                  limits:
-                    memory: 256Mi
-          - target:
+              metadata:
+                name: plane-redis-wl
+                namespace: cnd-project
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: plane-redis
+                        resources:
+                          requests:
+                            cpu: 50m
+                            memory: 128Mi
+                          limits:
+                            memory: 256Mi
+          - patch: |
+              apiVersion: apps/v1
               kind: StatefulSet
-              name: plane-rabbitmq-wl
-            patch: |
-              - op: add
-                path: /spec/template/spec/containers/0/resources
-                value:
-                  requests:
-                    cpu: 100m
-                    memory: 256Mi
-                  limits:
-                    memory: 512Mi
-              - op: add
-                path: /spec/template/spec/containers/0/readinessProbe
-                value:
-                  exec:
-                    command: ["rabbitmq-diagnostics", "-q", "ping"]
-                  initialDelaySeconds: 20
-                  periodSeconds: 15
-                  timeoutSeconds: 10
+              metadata:
+                name: plane-rabbitmq-wl
+                namespace: cnd-project
+              spec:
+                template:
+                  spec:
+                    containers:
+                      - name: plane-rabbitmq
+                        resources:
+                          requests:
+                            cpu: 100m
+                            memory: 256Mi
+                          limits:
+                            memory: 512Mi
+                        # The chart ships no probes at all, so the Service
+                        # advertises the broker before it accepts connections.
+                        readinessProbe:
+                          exec:
+                            command: ["rabbitmq-diagnostics", "-q", "ping"]
+                          initialDelaySeconds: 20
+                          periodSeconds: 15
+                          timeoutSeconds: 10
+
           # 1.6.3 hardcodes WEB_URL to http://<appHost> regardless of any ssl.*
           # setting — verified by rendering the chart. Behind our
           # force-ssl-redirect Ingress that gives Plane an http:// self-URL,
@@ -91,19 +124,36 @@ spec:
                 path: /data/WEB_URL
                 value: https://plane.cloudnativedays.fr
 
-          # Two defects in the migrator Job, both targeted by kind alone
-          # precisely because its name carries .Release.Revision:
+          # The migrator Job, targeted by a name REGEX because its name carries
+          # .Release.Revision (plane-api-migrate-1, -2, ...). Bare `kind: Job`
+          # would also match the MinIO bucket-init Job the chart renders when
+          # minio.local_setup is true — inert today, a trap if that flips.
+          #
           #   1. no ttlSecondsAfterFinished, so one Job accumulates per Helm
-          #      revision forever;
+          #      revision forever (see the driftDetection note above for the
+          #      consequence this has);
           #   2. no resources either, making it BestEffort — it can be evicted
           #      part-way through a Django migration, which is a far worse
-          #      failure than a slow one.
+          #      failure than a slow one;
+          #   3. backoffLimit 3 with no wait-for-database logic. On a DR restore
+          #      or cluster rebuild this Job and cnpg-plane are applied in the
+          #      same pass, and 3 retries are exhausted long before Postgres
+          #      finishes initdb. With restartPolicy OnFailure and Job backoff
+          #      capped at 6m, 20 retries rides out a cold cluster. The `test`
+          #      op makes this fail loudly if the chart ever changes the value.
           - target:
               kind: Job
+              name: plane-api-migrate-.*
             patch: |
               - op: add
                 path: /spec/ttlSecondsAfterFinished
                 value: 3600
+              - op: test
+                path: /spec/backoffLimit
+                value: 3
+              - op: replace
+                path: /spec/backoffLimit
+                value: 20
               - op: add
                 path: /spec/template/spec/containers/0/resources
                 value:
@@ -114,6 +164,8 @@ spec:
                     memory: 768Mi
 
   values:
+    # Same as the 1.6.3 chart default. Restated so a chart bump surfaces an
+    # app-version change as a diff here rather than moving silently.
     planeVersion: v1.4.1
 
     ingress:
@@ -125,6 +177,13 @@ spec:
       enabled: false
       # Still read by the plane-app-vars ConfigMap regardless of `enabled` —
       # this is what makes WEB_URL and CORS_ALLOWED_ORIGINS come out right.
+      # cors_allowed_origins is deliberately left unset so the chart derives it
+      # from this host as http:// + https://.
+      #
+      # NOTE: this host is ALSO hardcoded in the WEB_URL postRenderer patch
+      # above — change both. That copy is the only one with no feedback loop:
+      # rename the host and the Ingresses fail loudly, but a stale WEB_URL just
+      # sends auth redirects and generated links to a dead name.
       appHost: plane.cloudnativedays.fr
 
     postgres:
@@ -142,6 +201,7 @@ spec:
 
     redis:
       local_setup: true
+      # Chart default, restated for the same reason as planeVersion.
       image: valkey/valkey:7.2.11-alpine
       storageClass: node-local-retain
       volumeSize: 1Gi
@@ -164,20 +224,25 @@ spec:
       doc_store_existingSecret: plane-docstore-secret
       rabbitmq_existingSecret: plane-rabbitmq-secret
 
-    env:
-      # Only values that reach plane-app-vars, the one ConfigMap the chart
-      # renders unconditionally. cors_allowed_origins is left empty on purpose:
-      # the chart then derives it from appHost as http:// + https://.
-      api_key_rate_limit: "60/minute"
-
-    # assign_cluster_ip on every ingress-fronted service: the chart defaults
-    # these to headless. ingress-nginx copes via endpoints, but real ClusterIPs
-    # remove a variable and make port-forward behave normally.
+    # assign_cluster_ip on every service we reach by name — the ingress-fronted
+    # ones and the two bundled datastores above. The chart defaults these to
+    # headless; ingress-nginx copes via endpoints, but real ClusterIPs remove a
+    # variable and make port-forward behave normally.
     #
-    # CPU limits are set on all seven because the templates always render one
-    # (`cpu: {{ .Values.X.cpuLimit | default "500m" }}`) — they cannot be
-    # omitted the way the rest of this repo omits CPU limits.
+    # The templates always render a CPU limit (`cpu: {{ .Values.X.cpuLimit |
+    # default "500m" }}`), so it cannot be omitted the way the rest of this repo
+    # omits CPU limits. Only api, worker and beatworker deviate from the chart's
+    # 500m default — web/space/admin/live are left at it.
+    #
+    # pullPolicy: the chart defaults every app component to Always, which is a
+    # registry round-trip per container on every pod start against a tag that is
+    # already pinned by planeVersion.
+    #
+    # NOTE on api sizing: the chart hardcodes GUNICORN_WORKERS: "1" in
+    # plane-app-vars with no values knob, so one GIL-bound process cannot exceed
+    # ~1 core however high the limit is. 300m is reserved against that.
     api:
+      pullPolicy: IfNotPresent
       assign_cluster_ip: true
       cpuRequest: 300m
       cpuLimit: 1000m
@@ -185,41 +250,43 @@ spec:
       memoryLimit: 1Gi
 
     worker:
+      pullPolicy: IfNotPresent
       cpuRequest: 200m
       cpuLimit: 750m
       memoryRequest: 384Mi
       memoryLimit: 768Mi
 
     beatworker:
+      pullPolicy: IfNotPresent
       cpuRequest: 50m
       cpuLimit: 250m
       memoryRequest: 192Mi
       memoryLimit: 384Mi
 
     web:
+      pullPolicy: IfNotPresent
       assign_cluster_ip: true
       cpuRequest: 150m
-      cpuLimit: 500m
       memoryRequest: 384Mi
       memoryLimit: 768Mi
 
     space:
+      pullPolicy: IfNotPresent
       assign_cluster_ip: true
       cpuRequest: 100m
-      cpuLimit: 500m
       memoryRequest: 256Mi
       memoryLimit: 512Mi
 
     admin:
+      pullPolicy: IfNotPresent
       assign_cluster_ip: true
       cpuRequest: 100m
-      cpuLimit: 500m
       memoryRequest: 256Mi
       memoryLimit: 512Mi
 
     live:
+      pullPolicy: IfNotPresent
       assign_cluster_ip: true
       cpuRequest: 100m
-      cpuLimit: 500m
       memoryRequest: 256Mi
       memoryLimit: 512Mi

@@ -10,18 +10,16 @@ namespace: cnd-project
 # cnd-france-scw-secret is deliberately absent: it is shared with baserow and
 # is listed one level up, in project/kustomization.yaml.
 #
-# ORDERING: the migrator Job in helmrelease.yaml has backoffLimit 3 and no
-# wait-for-database logic, so it can exhaust its retries against a CNPG cluster
-# that is not Ready yet and wedge the release. That is sequenced by merging the
-# foundation PR first and waiting — which covers the FIRST rollout only. It is
-# not encoded: on a DR restore or cluster rebuild every file here is applied in
-# one pass, which is exactly the race.
+# ORDERING: the migrator Job in helmrelease.yaml has backoffLimit 3 by default
+# and no wait-for-database logic, so it can exhaust its retries against a CNPG
+# cluster that is not Ready yet. The postRenderer raises that to 20, which rides
+# out a cold cluster on a DR restore or rebuild — where every file here is
+# applied in one pass and no human is sequencing merges.
 #
-# `dependsOn` does only take Kustomization refs, but Flux `healthChecks` accept
-# `postgresql.cnpg.io/v1 Cluster`, and this repo already relies on that
-# (clusters/k8s-cndfrance-prod/analytics.yaml, shortener.yaml). Splitting plane
-# into its own Flux Kustomization with a healthCheck on Cluster/cnpg-plane would
-# make the ordering hold on every reconcile. Deliberately left as a follow-up.
+# That is a mitigation, not an encoding. `dependsOn` only takes Kustomization
+# refs, but Flux `healthChecks` do accept `postgresql.cnpg.io/v1 Cluster`, and
+# this repo already relies on that (clusters/k8s-cndfrance-prod/shortener.yaml).
+# Giving plane its own Flux Kustomization is the real fix; left as a follow-up.
 resources:
   - plane-cnpg-secret.yaml
   - plane-app-secret.yaml
@@ -34,3 +32,4 @@ resources:
   - helmrelease.yaml
   - ingress.yaml
   - ingress-godmode.yaml
+  - ingress-live.yaml

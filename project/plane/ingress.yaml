@@ -8,6 +8,8 @@
 # cluster-issuer annotations on one host would race for the same Secret.
 #
 # Routes follow the "Custom Ingress Routes" table in the plane-ce chart README.
+# /live/ and /god-mode are NOT here: nginx annotations apply per Ingress object,
+# so a path needing different annotations needs its own object.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -16,11 +18,6 @@ metadata:
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # /live/ carries the collaborative-editing websocket. nginx's 60s default
-    # read timeout drops those sessions mid-edit, with nothing in the UI to
-    # say why.
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
     # Kept in step with FILE_SIZE_LIMIT (20 MiB) in plane-docstore-secret.
     nginx.ingress.kubernetes.io/proxy-body-size: "20m"
 spec:
@@ -43,13 +40,6 @@ spec:
                 name: plane-api
                 port:
                   number: 8000
-          - path: /live/
-            pathType: Prefix
-            backend:
-              service:
-                name: plane-live
-                port:
-                  number: 3000
           - path: /spaces
             pathType: Prefix
             backend:
