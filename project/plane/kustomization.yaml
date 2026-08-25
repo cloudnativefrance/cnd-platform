@@ -13,8 +13,16 @@ namespace: cnd-project
 # helmrelease.yaml and the two Ingress objects land in a follow-up PR. The
 # migrator Job has backoffLimit 3 and no wait-for-database logic, so shipping
 # it alongside the CNPG cluster risks exhausting those retries before Postgres
-# is Ready and wedging the HelmRelease. Flux's dependsOn cannot reference a
-# CNPG Cluster, so the sequencing is done with two PRs instead.
+# is Ready and wedging the HelmRelease.
+#
+# NOTE: two merges sequence the FIRST rollout only. They do not encode the
+# ordering — on a DR restore or cluster rebuild both files are already in main
+# and get applied in one pass, which is the race this is meant to avoid.
+# `dependsOn` does only take Kustomization refs, but Flux `healthChecks` accept
+# `postgresql.cnpg.io/v1 Cluster` and this repo already relies on that
+# (clusters/k8s-cndfrance-prod/analytics.yaml, shortener.yaml). Giving plane its
+# own Flux Kustomization with a healthCheck on Cluster/cnpg-plane would make the
+# ordering hold on every reconcile. Deliberately left as a follow-up.
 resources:
   - plane-cnpg-secret.yaml
   - plane-app-secret.yaml

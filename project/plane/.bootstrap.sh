@@ -14,7 +14,7 @@
 # one place — and is accepted knowingly. If a kubeseal or kubeconform quirk is
 # ever fixed here, grep the other .bootstrap.sh files for the same code.
 #
-# Unlike the analytics and shortener bootstraps there is NO reseal block:
+# Unlike the other bootstraps in this repo there is NO reseal block:
 # plane lives in cnd-project, the same namespace as baserow, so the existing
 # cnd-france-scw-secret already applies. It is read here only to build the
 # doc-store secret, which needs the same credentials under Plane's own key
@@ -50,7 +50,6 @@ trap 'echo "ERROR: bootstrap failed at line $LINENO" >&2' ERR
 CTX="k8s-cndfrance-prod"
 NS="cnd-project"
 BUCKET="cnd-plane"
-S3_ENDPOINT="https://s3.fr-par.scw.cloud"
 GODMODE_USER="cnd"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -104,7 +103,7 @@ AMQP_URL="amqp://plane:${RABBITMQ_PASSWORD}@plane-rabbitmq.${NS}.svc.cluster.loc
 
 install -m 600 /dev/null "${BACKUP_FILE}"
 {
-  echo "# Plane bootstrap secrets — generated $(date -Iseconds)"
+  echo "# Plane bootstrap secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# MOVE these to a password manager and DELETE this file."
   echo "#"
   echo "# SECRET_KEY especially: it is not rotatable without corrupting"
@@ -127,6 +126,32 @@ SCW_ACCESS_KEY_ID="$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @
 SCW_SECRET_ACCESS_KEY="$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')"
 SCW_REGION="$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')"
 
+# Derived, not hardcoded: AWS_REGION on the doc-store secret comes from the same
+# secret, so a hardcoded host could disagree with it and sign requests for one
+# region against another's endpoint. communication/photos/.bootstrap.sh does the
+# same.
+S3_ENDPOINT="https://s3.${SCW_REGION}.scw.cloud"
+
+# ---------- Seal helper ----------
+# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
+# passes it into spec.template.metadata, where the kubeconform Dagger module in
+# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
+# to main twice already: 27b235b, 6c61223.
+#
+# Stripped inside the pipeline rather than with `sed -i` over the finished file:
+# plain filter sed has no GNU-vs-BSD `-i` divergence, leaves no .bak behind, and
+# the file is never on disk in a shape CI would reject. Same helper as the three
+# sibling bootstraps.
+#
+# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
+# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
+# it on main with green CI — so removing it too would make these files differ
+# cosmetically from every existing SealedSecret for no reason.
+seal() {
+  kubeseal --format yaml --namespace "${NS}" \
+    | sed '/^      creationTimestamp: null$/d' > "${DIR}/$1"
+}
+
 # ---------- Database credentials ----------
 # CNPG expects kubernetes.io/basic-auth with username + password.
 echo "==> Sealing plane-cnpg-secret"
@@ -136,7 +161,7 @@ kubectl --context "${CTX}" create secret generic plane-cnpg-secret \
   --from-literal=username=plane \
   --from-literal=password="${PG_PASSWORD}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-cnpg-secret.yaml"
+| seal plane-cnpg-secret.yaml
 
 # ---------- Application env ----------
 # Feeding external_secrets.app_env_existingSecret is not stylistic: without it
@@ -151,7 +176,7 @@ kubectl --context "${CTX}" create secret generic plane-app-secret \
   --from-literal=REDIS_URL="${REDIS_URL}" \
   --from-literal=AMQP_URL="${AMQP_URL}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-app-secret.yaml"
+| seal plane-app-secret.yaml
 
 # ---------- Live server env ----------
 # LIVE_SERVER_SECRET_KEY is the shared secret between api and live and MUST be
@@ -163,7 +188,7 @@ kubectl --context "${CTX}" create secret generic plane-live-secret \
   --from-literal=LIVE_SERVER_SECRET_KEY="${LIVE_SERVER_SECRET_KEY}" \
   --from-literal=REDIS_URL="${REDIS_URL}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-live-secret.yaml"
+| seal plane-live-secret.yaml
 
 # ---------- Doc store (Scaleway S3, not MinIO) ----------
 # USE_MINIO=0 switches Plane to plain S3. FILE_SIZE_LIMIT is in bytes and must
@@ -179,7 +204,7 @@ kubectl --context "${CTX}" create secret generic plane-docstore-secret \
   --from-literal=AWS_S3_ENDPOINT_URL="${S3_ENDPOINT}" \
   --from-literal=FILE_SIZE_LIMIT="20971520" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-docstore-secret.yaml"
+| seal plane-docstore-secret.yaml
 
 # ---------- RabbitMQ ----------
 # The user/password here must match what AMQP_URL above was built from: this
@@ -190,7 +215,7 @@ kubectl --context "${CTX}" create secret generic plane-rabbitmq-secret \
   --from-literal=RABBITMQ_DEFAULT_USER="plane" \
   --from-literal=RABBITMQ_DEFAULT_PASS="${RABBITMQ_PASSWORD}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-rabbitmq-secret.yaml"
+| seal plane-rabbitmq-secret.yaml
 
 # ---------- /god-mode basic auth ----------
 # The chart exposes the instance admin panel on the app host with no auth gate.
@@ -200,18 +225,8 @@ kubectl --context "${CTX}" create secret generic plane-godmode-auth \
   --namespace "${NS}" \
   --from-literal=auth="${GODMODE_AUTH_LINE}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/plane-godmode-auth-secret.yaml"
+| seal plane-godmode-auth-secret.yaml
 
-# ---------- Strip the templated creationTimestamp ----------
-# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
-# passes it into spec.template.metadata, where the kubeconform Dagger module in
-# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
-# to main twice already: 27b235b, 6c61223.
-#
-# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
-# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
-# it on main with green CI — so removing it too would make these files differ
-# cosmetically from every existing SealedSecret for no reason.
 SEALED_FILES=(
   plane-cnpg-secret.yaml
   plane-app-secret.yaml
@@ -220,16 +235,6 @@ SEALED_FILES=(
   plane-rabbitmq-secret.yaml
   plane-godmode-auth-secret.yaml
 )
-#
-# `-i.bak` + rm, not the bare `sed -i` the other three bootstraps use: bare
-# `-i` is GNU-only, and on BSD sed (macOS, where this repo is maintained) it
-# consumes the following script as the backup suffix and fails. The suffixed
-# form parses identically on both. The other .bootstrap.sh files still carry
-# the GNU-only form.
-for f in "${SEALED_FILES[@]}"; do
-  sed -i.bak '/^      creationTimestamp: null$/d' "${DIR}/${f}"
-  rm -f "${DIR}/${f}.bak"
-done
 
 # ---------- Validate ----------
 # Non-empty is too weak: a stderr dump or a truncated write also satisfies it.

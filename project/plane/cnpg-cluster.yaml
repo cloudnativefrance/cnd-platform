@@ -59,9 +59,5 @@ spec:
       memory: "512Mi"
       cpu: 200m
     limits:
-      # 2x the request, not equal to it — the reasoning is written out in
-      # analytics/cnpg-cluster.yaml: equal values make the pod Guaranteed QoS
-      # with zero burst room, and the midnight ScheduledBackup runs
-      # barman-cloud-backup with gzip compression and S3 upload buffers inside
-      # this same pod, as does pg_basebackup on a replica resync.
+      # 2x the request, not equal to it — reasoning in analytics/cnpg-cluster.yaml.
       memory: "1Gi"
