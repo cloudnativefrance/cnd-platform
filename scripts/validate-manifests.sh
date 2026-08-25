@@ -28,7 +28,7 @@ done
 
 BUNDLE_DIR="${BUNDLE_DIR:-.bundle}"
 
-echo "==> [1/3] Rendering kustomizations into ${BUNDLE_DIR}/"
+echo "==> [1/4] Rendering kustomizations into ${BUNDLE_DIR}/"
 rm -rf "${BUNDLE_DIR}"
 mkdir -p "${BUNDLE_DIR}"
 
@@ -49,14 +49,14 @@ done < <(find . -name kustomization.yaml -not -path "*/templates/*" -not -path "
 
 echo "    rendered ${rendered} kustomization(s)"
 
-echo "==> [2/3] polaris audit (workload best practices)"
+echo "==> [2/4] polaris audit (workload best practices)"
 polaris audit \
   --audit-path "${BUNDLE_DIR}" \
   --config .polaris.yaml \
   --set-exit-code-on-danger \
   --only-show-failed-tests
 
-echo "==> [3/3] SealedSecret template hygiene"
+echo "==> [3/4] SealedSecret template hygiene"
 # `creationTimestamp: null` inside spec.template.metadata is rejected by the
 # kubeconform Dagger module in CI (the SealedSecret CRD schema sets
 # additionalProperties: false there). kubectl create --dry-run=client emits it
@@ -79,5 +79,32 @@ if grep -rn '^      creationTimestamp: null$' --include='*.yaml' \
   exit 1
 fi
 echo "    OK: no templated creationTimestamp"
+
+echo "==> [4/4] Portable shell in bootstrap scripts"
+# These scripts are run by hand on a maintainer's laptop, which is macOS — but
+# both CI jobs run on ubuntu-latest and never execute a .bootstrap.sh, so a
+# GNU-only construct is green in CI and only fails on the machine that matters,
+# typically part-way through sealing. That is how the bare `sed -i` below
+# reached main in three scripts at once.
+#
+#   sed -i '...'      BSD sed reads -i's argument as the backup suffix, then
+#                     parses the FILENAME as the script. Fold the filter into
+#                     the pipeline instead (see the seal() helper in
+#                     analytics/.bootstrap.sh) — no -i, no portability question.
+#   date -Iseconds    Not a BSD date flag. Worse, it fails silently inside
+#                     $(...) used as an echo argument, so set -e never fires.
+#                     Use: date -u +%Y-%m-%dT%H:%M:%SZ
+# --exclude this file: the patterns appear in the comment above and in the
+# grep itself, so without it the gate always trips on its own source.
+if grep -rnE "sed -i '|date -Iseconds" \
+     --include='*.sh' --include='*.md' \
+     --exclude="$(basename "${BASH_SOURCE[0]}")" \
+     --exclude-dir=.bundle --exclude-dir=.git . ; then
+  echo "" >&2
+  echo "error: GNU-only construct in a script that is run on macOS." >&2
+  echo "       See the comment above this check for the portable form." >&2
+  exit 1
+fi
+echo "    OK: no GNU-only constructs"
 
 echo "==> All gates passed"
