@@ -10,19 +10,18 @@ namespace: cnd-project
 # cnd-france-scw-secret is deliberately absent: it is shared with baserow and
 # is listed one level up, in project/kustomization.yaml.
 #
-# helmrelease.yaml and the two Ingress objects land in a follow-up PR. The
-# migrator Job has backoffLimit 3 and no wait-for-database logic, so shipping
-# it alongside the CNPG cluster risks exhausting those retries before Postgres
-# is Ready and wedging the HelmRelease.
+# ORDERING: the migrator Job in helmrelease.yaml has backoffLimit 3 and no
+# wait-for-database logic, so it can exhaust its retries against a CNPG cluster
+# that is not Ready yet and wedge the release. That is sequenced by merging the
+# foundation PR first and waiting — which covers the FIRST rollout only. It is
+# not encoded: on a DR restore or cluster rebuild every file here is applied in
+# one pass, which is exactly the race.
 #
-# NOTE: two merges sequence the FIRST rollout only. They do not encode the
-# ordering — on a DR restore or cluster rebuild both files are already in main
-# and get applied in one pass, which is the race this is meant to avoid.
 # `dependsOn` does only take Kustomization refs, but Flux `healthChecks` accept
-# `postgresql.cnpg.io/v1 Cluster` and this repo already relies on that
-# (clusters/k8s-cndfrance-prod/analytics.yaml, shortener.yaml). Giving plane its
-# own Flux Kustomization with a healthCheck on Cluster/cnpg-plane would make the
-# ordering hold on every reconcile. Deliberately left as a follow-up.
+# `postgresql.cnpg.io/v1 Cluster`, and this repo already relies on that
+# (clusters/k8s-cndfrance-prod/analytics.yaml, shortener.yaml). Splitting plane
+# into its own Flux Kustomization with a healthCheck on Cluster/cnpg-plane would
+# make the ordering hold on every reconcile. Deliberately left as a follow-up.
 resources:
   - plane-cnpg-secret.yaml
   - plane-app-secret.yaml
@@ -32,3 +31,6 @@ resources:
   - plane-godmode-auth-secret.yaml
   - cnpg-cluster.yaml
   - cnpg-scheduled-backup.yaml
+  - helmrelease.yaml
+  - ingress.yaml
+  - ingress-godmode.yaml

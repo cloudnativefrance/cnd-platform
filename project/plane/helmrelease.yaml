@@ -1,0 +1,225 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: plane
+spec:
+  releaseName: plane
+  driftDetection:
+    # `warn`, not the `enabled` every other HelmRelease here uses. The chart
+    # stamps `timestamp: {{ now }}` into every pod template
+    # (templates/workloads/*.deployment.yaml), so the rendered manifest differs
+    # on every render. Start by watching what drift detection actually reports
+    # before letting it correct anything.
+    mode: warn
+  chart:
+    spec:
+      chart: plane-ce
+      sourceRef:
+        kind: HelmRepository
+        name: plane
+        namespace: flux-system
+      # 1.6.3 is the newest version PUBLISHED at helm.plane.so. The chart's
+      # Chart.yaml on git master says 1.7.0, but that is unreleased — pinning
+      # it makes the HelmRelease fail with "chart not found".
+      version: "1.6.3"
+  interval: 10m0s
+  # Longer than the repo's usual 8m: an install runs the migrator Job to
+  # completion before the release reports Ready.
+  timeout: 15m
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+
+  # The chart ships three defects that cannot be fixed from values.
+  postRenderers:
+    - kustomize:
+        patches:
+          # The bundled Redis and RabbitMQ StatefulSets render with NO
+          # `resources` block at all, and the chart exposes no knob for one.
+          # That makes them BestEffort — first evicted under node memory
+          # pressure. This cluster has a documented history of exactly that
+          # (88a8b26, and ~6 OOMKill fixes across pretalx and baserow), and a
+          # evicted RabbitMQ stalls every Celery task Plane has.
+          - target:
+              kind: StatefulSet
+              name: plane-redis-wl
+            patch: |
+              - op: add
+                path: /spec/template/spec/containers/0/resources
+                value:
+                  requests:
+                    cpu: 50m
+                    memory: 128Mi
+                  limits:
+                    memory: 256Mi
+          - target:
+              kind: StatefulSet
+              name: plane-rabbitmq-wl
+            patch: |
+              - op: add
+                path: /spec/template/spec/containers/0/resources
+                value:
+                  requests:
+                    cpu: 100m
+                    memory: 256Mi
+                  limits:
+                    memory: 512Mi
+              - op: add
+                path: /spec/template/spec/containers/0/readinessProbe
+                value:
+                  exec:
+                    command: ["rabbitmq-diagnostics", "-q", "ping"]
+                  initialDelaySeconds: 20
+                  periodSeconds: 15
+                  timeoutSeconds: 10
+          # 1.6.3 hardcodes WEB_URL to http://<appHost> regardless of any ssl.*
+          # setting — verified by rendering the chart. Behind our
+          # force-ssl-redirect Ingress that gives Plane an http:// self-URL,
+          # which breaks auth redirects and every generated link.
+          #
+          # 1.7.0 adds ssl.externalTermination, which makes the chart emit
+          # https:// on its own. When this pin moves to 1.7.0+, DELETE this
+          # patch and set `ssl.externalTermination: true` in values instead.
+          - target:
+              kind: ConfigMap
+              name: plane-app-vars
+            patch: |
+              - op: replace
+                path: /data/WEB_URL
+                value: https://plane.cloudnativedays.fr
+
+          # Two defects in the migrator Job, both targeted by kind alone
+          # precisely because its name carries .Release.Revision:
+          #   1. no ttlSecondsAfterFinished, so one Job accumulates per Helm
+          #      revision forever;
+          #   2. no resources either, making it BestEffort — it can be evicted
+          #      part-way through a Django migration, which is a far worse
+          #      failure than a slow one.
+          - target:
+              kind: Job
+            patch: |
+              - op: add
+                path: /spec/ttlSecondsAfterFinished
+                value: 3600
+              - op: add
+                path: /spec/template/spec/containers/0/resources
+                value:
+                  requests:
+                    cpu: 200m
+                    memory: 384Mi
+                  limits:
+                    memory: 768Mi
+
+  values:
+    planeVersion: v1.4.1
+
+    ingress:
+      # The chart's own Ingress is not used. Its annotations apply to the whole
+      # object, so /god-mode cannot be gated separately, and two Ingresses
+      # claiming the same host+path make ingress-nginx pick the older one and
+      # log a conflict. ingress.yaml and ingress-godmode.yaml own the routes,
+      # following the chart README's "Custom Ingress Routes" table.
+      enabled: false
+      # Still read by the plane-app-vars ConfigMap regardless of `enabled` —
+      # this is what makes WEB_URL and CORS_ALLOWED_ORIGINS come out right.
+      appHost: plane.cloudnativedays.fr
+
+    postgres:
+      # CNPG instead — see cnpg-cluster.yaml. DATABASE_URL comes from
+      # plane-app-secret, so no pgdb secret is rendered at all.
+      local_setup: false
+
+    minio:
+      # Scaleway S3 instead. All the AWS_* values live in plane-docstore-secret.
+      local_setup: false
+      env:
+        # Read by plane-app-vars (MINIO_ENDPOINT_SSL) even with MinIO off;
+        # the Scaleway endpoint is https.
+        minio_endpoint_ssl: true
+
+    redis:
+      local_setup: true
+      image: valkey/valkey:7.2.11-alpine
+      storageClass: node-local-retain
+      volumeSize: 1Gi
+      assign_cluster_ip: true
+
+    rabbitmq:
+      local_setup: true
+      storageClass: node-local-retain
+      volumeSize: 2Gi
+      assign_cluster_ip: true
+
+    # Not stylistic: without these hooks the chart builds DATABASE_URL and
+    # AMQP_URL from values, which would put both passwords in Git as plaintext.
+    # Supplying them also skips the chart's own secret templates entirely, so
+    # env.secret_key, env.pgdb_*, env.aws_* and env.docstore_bucket are never
+    # rendered and are deliberately left unset below.
+    external_secrets:
+      app_env_existingSecret: plane-app-secret
+      live_env_existingSecret: plane-live-secret
+      doc_store_existingSecret: plane-docstore-secret
+      rabbitmq_existingSecret: plane-rabbitmq-secret
+
+    env:
+      # Only values that reach plane-app-vars, the one ConfigMap the chart
+      # renders unconditionally. cors_allowed_origins is left empty on purpose:
+      # the chart then derives it from appHost as http:// + https://.
+      api_key_rate_limit: "60/minute"
+
+    # assign_cluster_ip on every ingress-fronted service: the chart defaults
+    # these to headless. ingress-nginx copes via endpoints, but real ClusterIPs
+    # remove a variable and make port-forward behave normally.
+    #
+    # CPU limits are set on all seven because the templates always render one
+    # (`cpu: {{ .Values.X.cpuLimit | default "500m" }}`) — they cannot be
+    # omitted the way the rest of this repo omits CPU limits.
+    api:
+      assign_cluster_ip: true
+      cpuRequest: 300m
+      cpuLimit: 1000m
+      memoryRequest: 512Mi
+      memoryLimit: 1Gi
+
+    worker:
+      cpuRequest: 200m
+      cpuLimit: 750m
+      memoryRequest: 384Mi
+      memoryLimit: 768Mi
+
+    beatworker:
+      cpuRequest: 50m
+      cpuLimit: 250m
+      memoryRequest: 192Mi
+      memoryLimit: 384Mi
+
+    web:
+      assign_cluster_ip: true
+      cpuRequest: 150m
+      cpuLimit: 500m
+      memoryRequest: 384Mi
+      memoryLimit: 768Mi
+
+    space:
+      assign_cluster_ip: true
+      cpuRequest: 100m
+      cpuLimit: 500m
+      memoryRequest: 256Mi
+      memoryLimit: 512Mi
+
+    admin:
+      assign_cluster_ip: true
+      cpuRequest: 100m
+      cpuLimit: 500m
+      memoryRequest: 256Mi
+      memoryLimit: 512Mi
+
+    live:
+      assign_cluster_ip: true
+      cpuRequest: 100m
+      cpuLimit: 500m
+      memoryRequest: 256Mi
+      memoryLimit: 512Mi

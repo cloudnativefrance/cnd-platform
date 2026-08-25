@@ -1,0 +1,36 @@
+---
+# Plane's instance admin panel (SMTP, auth settings, workspace controls). The
+# chart puts it on the application host at a predictable path with no gate in
+# front of it, so it gets its own Ingress with basic-auth — the same pattern
+# website-staging and the shortener's admin UI use.
+#
+# No cert-manager annotation here: ingress.yaml owns plane-tls for this host,
+# and a second cluster-issuer annotation would race it for the same Secret.
+# The tls block is still declared so nginx serves the certificate on this rule.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plane-godmode
+  namespace: cnd-project
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: plane-godmode-auth
+    nginx.ingress.kubernetes.io/auth-realm: "CND France — Plane admin"
+spec:
+  ingressClassName: public
+  rules:
+    - host: plane.cloudnativedays.fr
+      http:
+        paths:
+          - path: /god-mode
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-admin
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - plane.cloudnativedays.fr
+      secretName: plane-tls
