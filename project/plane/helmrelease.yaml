@@ -114,8 +114,16 @@ spec:
           # which breaks auth redirects and every generated link.
           #
           # 1.7.0 adds ssl.externalTermination, which makes the chart emit
-          # https:// on its own. When this pin moves to 1.7.0+, DELETE this
-          # patch and set `ssl.externalTermination: true` in values instead.
+          # https:// on its own. When this pin moves to 1.7.0+, DELETE the
+          # WEB_URL op and set `ssl.externalTermination: true` in values
+          # instead. The *_BASE_URL ops below stay either way.
+          #
+          # Those three are `add`, not `replace`: 1.6.3 never renders them, so
+          # /api/instances/ reports them null and the web app falls back to
+          # building admin links as <origin>:3000. Nothing listens on 3000 at
+          # the Ingress, so /god-mode hangs until the browser gives up.
+          # The values track the paths in ingress.yaml and
+          # ingress-godmode.yaml and must be changed together with them.
           - target:
               kind: ConfigMap
               name: plane-app-vars
@@ -123,6 +131,15 @@ spec:
               - op: replace
                 path: /data/WEB_URL
                 value: https://plane.cloudnativedays.fr
+              - op: add
+                path: /data/APP_BASE_URL
+                value: https://plane.cloudnativedays.fr
+              - op: add
+                path: /data/SPACE_BASE_URL
+                value: https://plane.cloudnativedays.fr/spaces
+              - op: add
+                path: /data/ADMIN_BASE_URL
+                value: https://plane.cloudnativedays.fr/god-mode
 
           # The migrator Job, targeted by a name REGEX because its name carries
           # .Release.Revision (plane-api-migrate-1, -2, ...). Bare `kind: Job`
