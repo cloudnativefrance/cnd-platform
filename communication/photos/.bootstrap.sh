@@ -49,7 +49,7 @@ JWT_SECRET="$(openssl rand -base64 32 | tr '/+' '_-')"
 
 # ---------- Snapshot the plaintexts to a backup file the user MUST move ----------
 {
-  echo "# Ente photos bootstrap secrets — generated $(date -Iseconds)"
+  echo "# Ente photos bootstrap secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# MOVE these to a password manager and DELETE this file."
   echo ""
   echo "POSTGRES_PASSWORD=${PG_PASSWORD}"
@@ -100,6 +100,26 @@ BREVO_DATA=$(kubectl --context "${CTX}" -n "${SOURCE_NS}" get secret brevo-smtp 
 # SMTP AUTH with 535. We rename it to 'password' below for the museum env-from.
 BREVO_PASSWORD=$(echo "$BREVO_DATA" | jq -r '.data."email-password" | @base64d')
 
+# ---------- Seal helper ----------
+# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
+# passes it into spec.template.metadata, where the kubeconform Dagger module in
+# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
+# to main twice already: 27b235b, 6c61223.
+#
+# Stripped inside the pipeline rather than with `sed -i` over the finished file.
+# Plain filter sed is portable by construction: bare `-i` is GNU-only (BSD sed,
+# macOS, reads `-i`'s argument as the backup suffix and then parses the FILENAME
+# as the script), and the suffixed `-i.bak` form that works on both still leaves
+# a .bak to clean up and writes the rejected form to disk before fixing it.
+# Here the file is never on disk in a shape CI would reject.
+#
+# sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
+# asserts the same thing repo-wide as the real gate.
+seal() {
+  kubeseal --format yaml --namespace "${NS}" \
+    | sed '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' > "${PHOTOS_DIR}/$1"
+}
+
 # ---------- Task C3: ente-cnpg-secret ----------
 echo "==> Sealing ente-cnpg-secret (Postgres credentials)"
 kubectl --context "${CTX}" create secret generic ente-cnpg-secret \
@@ -108,7 +128,7 @@ kubectl --context "${CTX}" create secret generic ente-cnpg-secret \
   --from-literal=username=ente \
   --from-literal=password="${PG_PASSWORD}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/cnpg-secret.yaml"
+| seal cnpg-secret.yaml
 
 # ---------- Task C4: cnd-france-scw-secret + brevo-smtp ----------
 echo "==> Resealing cnd-france-scw-secret for ${NS}"
@@ -118,14 +138,14 @@ kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
   --from-literal=secret-access-key="${SCW_SECRET_ACCESS_KEY}" \
   --from-literal=region="${SCW_REGION}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/cnd-france-scw-secret.yaml"
+| seal cnd-france-scw-secret.yaml
 
 echo "==> Resealing brevo-smtp for ${NS}"
 kubectl --context "${CTX}" create secret generic brevo-smtp \
   --namespace "${NS}" \
   --from-literal=password="${BREVO_PASSWORD}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/brevo-smtp-secret.yaml"
+| seal brevo-smtp-secret.yaml
 
 # ---------- Task C5: museum-secret ----------
 echo "==> Sealing museum-secret (encryption + hash + JWT)"
@@ -135,15 +155,7 @@ kubectl --context "${CTX}" create secret generic museum-secret \
   --from-literal=key-hash="${KEY_HASH}" \
   --from-literal=jwt-secret="${JWT_SECRET}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${PHOTOS_DIR}/museum-secret.yaml"
-
-# ---------- Strip stale 'creationTimestamp: null' from all sealed files ----------
-# kubectl create --dry-run=client emits creationTimestamp: null, and kubeseal
-# passes it through into spec.template.metadata. The repo's kubeconform CI
-# rejects it (additionalProperties not allowed). Same fix as commit 27b235b.
-for f in cnpg-secret.yaml cnd-france-scw-secret.yaml brevo-smtp-secret.yaml museum-secret.yaml; do
-  sed -i '/^  creationTimestamp: null$/d; /^      creationTimestamp: null$/d' "${PHOTOS_DIR}/${f}"
-done
+| seal museum-secret.yaml
 
 # ---------- Validate ----------
 echo "==> Verifying secret files exist"

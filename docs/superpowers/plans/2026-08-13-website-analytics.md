@@ -171,7 +171,7 @@ APP_SECRET="$(openssl rand -base64 32 | tr -d '\n')"   # never URL-interpolated
 
 install -m 600 /dev/null "${BACKUP_FILE}"
 {
-  echo "# Umami bootstrap secrets — generated $(date -Iseconds)"
+  echo "# Umami bootstrap secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# MOVE these to a password manager and DELETE this file."
   echo ""
   echo "POSTGRES_PASSWORD=${PG_PASSWORD}"
@@ -225,9 +225,24 @@ kubectl --context "${CTX}" create secret generic umami-secret \
 # harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
 # it on main with green CI — so removing it too would make these files differ
 # cosmetically from every existing SealedSecret for no reason.
-for f in cnd-france-scw-secret.yaml umami-cnpg-secret.yaml umami-secret.yaml; do
-  sed -i '/^      creationTimestamp: null$/d' "${DIR}/${f}"
-done
+#
+# sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
+# asserts the same thing repo-wide as a real gate.
+#
+# NOTE: the shipped scripts do NOT strip with `sed -i` over the finished files,
+# as an earlier draft of this plan did. Bare `sed -i` is GNU-only — BSD sed
+# (macOS) reads `-i`'s argument as the backup suffix and then parses the
+# FILENAME as the script — and it aborts AFTER the sealed files are on disk.
+# Fold the strip into the pipeline that writes each file instead:
+#
+#   seal() {
+#     kubeseal --format yaml --namespace "${NS}" \
+#       | sed '/^      creationTimestamp: null$/d' > "${DIR}/$1"
+#   }
+#
+# then end each pipeline with `| seal <name>.yaml`. Plain filter sed has no
+# GNU/BSD divergence, leaves no .bak, and never writes the rejected form to
+# disk. See analytics/.bootstrap.sh for the shipped shape.
 
 # ---------- Validate ----------
 # Non-empty is too weak: a stderr dump or a truncated write also satisfies it.

@@ -76,7 +76,7 @@ AUTH_LINE="${ADMIN_USER}:$(openssl passwd -apr1 -stdin <<< "${ADMIN_PASSWORD}")"
 
 install -m 600 /dev/null "${BACKUP_FILE}"
 {
-  echo "# Shlink bootstrap secrets — generated $(date -Iseconds)"
+  echo "# Shlink bootstrap secrets — generated $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "# MOVE these to a password manager and DELETE this file."
   echo ""
   echo "POSTGRES_PASSWORD=${PG_PASSWORD}"
@@ -94,6 +94,31 @@ SCW_ACCESS_KEY_ID="$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @
 SCW_SECRET_ACCESS_KEY="$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')"
 SCW_REGION="$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')"
 
+# ---------- Seal helper ----------
+# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
+# passes it into spec.template.metadata, where the kubeconform Dagger module in
+# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
+# to main twice already: 27b235b, 6c61223.
+#
+# Stripped inside the pipeline rather than with `sed -i` over the finished file.
+# Plain filter sed is portable by construction: bare `-i` is GNU-only (BSD sed,
+# macOS, reads `-i`'s argument as the backup suffix and then parses the FILENAME
+# as the script), and the suffixed `-i.bak` form that works on both still leaves
+# a .bak to clean up and writes the rejected form to disk before fixing it.
+# Here the file is never on disk in a shape CI would reject.
+#
+# sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
+# asserts the same thing repo-wide as the real gate.
+#
+# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
+# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
+# it on main with green CI — so removing it too would make these files differ
+# cosmetically from every existing SealedSecret for no reason.
+seal() {
+  kubeseal --format yaml --namespace "${NS}" \
+    | sed '/^      creationTimestamp: null$/d' > "${DIR}/$1"
+}
+
 echo "==> Resealing cnd-france-scw-secret for ${NS}"
 kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
   --namespace "${NS}" \
@@ -101,7 +126,7 @@ kubectl --context "${CTX}" create secret generic cnd-france-scw-secret \
   --from-literal=secret-access-key="${SCW_SECRET_ACCESS_KEY}" \
   --from-literal=region="${SCW_REGION}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/cnd-france-scw-secret.yaml"
+| seal cnd-france-scw-secret.yaml
 
 # ---------- Database credentials ----------
 # CNPG expects kubernetes.io/basic-auth with username + password.
@@ -112,7 +137,7 @@ kubectl --context "${CTX}" create secret generic shlink-cnpg-secret \
   --from-literal=username=shlink \
   --from-literal=password="${PG_PASSWORD}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-cnpg-secret.yaml"
+| seal shlink-cnpg-secret.yaml
 
 # ---------- Shlink initial API key ----------
 echo "==> Sealing shlink-secret (initial API key)"
@@ -120,7 +145,7 @@ kubectl --context "${CTX}" create secret generic shlink-secret \
   --namespace "${NS}" \
   --from-literal=initial-api-key="${API_KEY}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/shlink-secret.yaml"
+| seal shlink-secret.yaml
 
 # ---------- Admin UI basic auth ----------
 # ingress-nginx requires the data key to be named exactly `auth`.
@@ -129,24 +154,7 @@ kubectl --context "${CTX}" create secret generic shlink-admin-auth \
   --namespace "${NS}" \
   --from-literal=auth="${AUTH_LINE}" \
   --dry-run=client -o yaml \
-| kubeseal --format yaml --namespace "${NS}" > "${DIR}/web-client-auth-sealedsecret.yaml"
-
-# ---------- Strip the templated creationTimestamp ----------
-# kubectl create --dry-run=client emits `creationTimestamp: null` and kubeseal
-# passes it into spec.template.metadata, where the kubeconform Dagger module in
-# CI rejects it (the CRD schema sets additionalProperties: false there). Shipped
-# to main twice already: 27b235b, 6c61223.
-#
-# Only the 6-space form is stripped. The top-level metadata.creationTimestamp is
-# harmless — ticketing/alfio, callforpapers/pretalx and website-staging all carry
-# it on main with green CI — so removing it too would make these files differ
-# cosmetically from every existing SealedSecret for no reason.
-#
-# sed exits 0 when it matches nothing, which is why scripts/validate-manifests.sh
-# asserts the same thing repo-wide as a real gate.
-for f in cnd-france-scw-secret.yaml shlink-cnpg-secret.yaml shlink-secret.yaml web-client-auth-sealedsecret.yaml; do
-  sed -i '/^      creationTimestamp: null$/d' "${DIR}/${f}"
-done
+| seal web-client-auth-sealedsecret.yaml
 
 # ---------- Validate ----------
 # Non-empty is too weak: a stderr dump or a truncated write also satisfies it.
