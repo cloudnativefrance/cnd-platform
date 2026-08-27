@@ -1,0 +1,63 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-plane
+spec:
+  description: "PostgreSQL cluster for the application Plane"
+  instances: 2
+
+  bootstrap:
+    initdb:
+      database: plane
+      owner: plane
+      secret:
+        name: plane-cnpg-secret
+
+  superuserSecret:
+    name: plane-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      destinationPath: "s3://cloudnativedaysfr/cnpg/plane"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: access-key-id
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secret-access-key
+        region:
+          name: cnd-france-scw-secret
+          key: region
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: 200m
+    limits:
+      # 2x the request, not equal to it — reasoning in analytics/cnpg-cluster.yaml.
+      memory: "1Gi"

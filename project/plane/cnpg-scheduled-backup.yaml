@@ -1,0 +1,14 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: cnpg-plane
+spec:
+  # 02:30, not the "0 0 0 * * *" every other ScheduledBackup here uses. All
+  # eight existing ones fire in the same second, each forking barman-cloud-backup
+  # with gzip and S3 upload buffers inside its own Postgres pod — on a cluster
+  # with a documented memory-pressure history (88a8b26, ~6 OOMKill fixes). A new
+  # file is the cheapest place to stop adding to that burst.
+  schedule: "0 30 2 * * *" # 02:30 every day
+  backupOwnerReference: self
+  cluster:
+    name: cnpg-plane
