@@ -124,12 +124,13 @@ echo "==> Reading Scaleway creds from ${NS}/cnd-france-scw-secret"
 SCW_DATA="$(kubectl --context "${CTX}" -n "${NS}" get secret cnd-france-scw-secret -o json)"
 SCW_ACCESS_KEY_ID="$(echo "$SCW_DATA"     | jq -r '.data."access-key-id"     | @base64d')"
 SCW_SECRET_ACCESS_KEY="$(echo "$SCW_DATA" | jq -r '.data."secret-access-key" | @base64d')"
-SCW_REGION="$(echo "$SCW_DATA"            | jq -r '.data."region"            | @base64d')"
-
-# Derived, not hardcoded: AWS_REGION on the doc-store secret comes from the same
-# secret, so a hardcoded host could disagree with it and sign requests for one
-# region against another's endpoint. communication/photos/.bootstrap.sh does the
-# same.
+# Hardcoded rather than read from the shared secret's `region` key: that key
+# holds "PAR", a console-style zone label, so deriving the endpoint from it
+# gives https://s3.PAR.scw.cloud, which does not resolve. CNPG tolerates "PAR"
+# only because every cnpg-cluster.yaml here hardcodes endpointURL to fr-par and
+# feeds region to nothing but the SigV4 signer. Plane hands presigned URLs to
+# the browser, so it gets the real name, as museum-config.yaml already does.
+SCW_REGION="fr-par"
 S3_ENDPOINT="https://s3.${SCW_REGION}.scw.cloud"
 
 # ---------- Seal helper ----------
