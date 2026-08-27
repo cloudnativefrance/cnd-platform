@@ -1,0 +1,38 @@
+---
+# /live/ carries Plane's collaborative-editing websocket, and it is the ONLY
+# path that needs an hour-long proxy timeout. nginx applies these annotations
+# per Ingress OBJECT, not per path, so leaving them on ingress.yaml would give
+# /api, /auth, /spaces and / the same hour — turning a stalled upstream into an
+# hour-long wedge instead of a 60s one, against a Django API the chart pins to
+# a single gunicorn worker.
+#
+# Third object on this host, same reasoning as ingress-godmode.yaml: a path that
+# needs different annotations needs its own Ingress. ingress.yaml owns the
+# cert-manager annotation and therefore plane-tls; the tls block here only tells
+# nginx to serve that certificate on this rule.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plane-live
+  namespace: cnd-project
+  annotations:
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+spec:
+  ingressClassName: public
+  rules:
+    - host: plane.cloudnativedays.fr
+      http:
+        paths:
+          - path: /live/
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-live
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - plane.cloudnativedays.fr
+      secretName: plane-tls

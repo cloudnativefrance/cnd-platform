@@ -1,0 +1,60 @@
+---
+# The chart's own Ingress is disabled (see helmrelease.yaml). Two objects share
+# this host: this one serves the application, ingress-godmode.yaml serves
+# /god-mode behind basic-auth. ingress-nginx merges rules across objects for a
+# host as long as the paths are disjoint, and /god-mode appears only there.
+#
+# cert-manager is annotated HERE ONLY. Both objects reference plane-tls; two
+# cluster-issuer annotations on one host would race for the same Secret.
+#
+# Routes follow the "Custom Ingress Routes" table in the plane-ce chart README.
+# /live/ and /god-mode are NOT here: nginx annotations apply per Ingress object,
+# so a path needing different annotations needs its own object.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plane
+  namespace: cnd-project
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    # Kept in step with FILE_SIZE_LIMIT (20 MiB) in plane-docstore-secret.
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: public
+  rules:
+    - host: plane.cloudnativedays.fr
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-api
+                port:
+                  number: 8000
+          - path: /auth
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-api
+                port:
+                  number: 8000
+          - path: /spaces
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-space
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: plane-web
+                port:
+                  number: 3000
+  tls:
+    - hosts:
+        - plane.cloudnativedays.fr
+      secretName: plane-tls
