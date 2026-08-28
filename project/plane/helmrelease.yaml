@@ -141,6 +141,42 @@ spec:
                 path: /data/ADMIN_BASE_URL
                 value: https://plane.cloudnativedays.fr/god-mode
 
+              # SMTP. These are read from the DATABASE at runtime, not from env:
+              # SKIP_ENV_VAR defaults to "1" (settings/common.py), so
+              # get_configuration_value() returns the instance_configurations
+              # row and only falls back to env when the row is ABSENT. The one
+              # writer is the `configure_instance` command on the migrator Job,
+              # and it seeds with get_or_create -- an existing row is skipped,
+              # logged as "configuration already exists".
+              #
+              # Consequence: editing a value here does NOTHING on its own. The
+              # matching row must be DELETEd first, then a Helm revision bump
+              # re-runs the migrator to re-seed it from these values.
+              #
+              # Host/port/user mirror project/baserow/helmrelease.yaml, which
+              # sends through this same Brevo relay -- reusing a combination
+              # already proven to authenticate. EMAIL_HOST_USER is a Brevo SMTP
+              # login rather than a mailbox and is already plaintext there, so
+              # the password below is the only real secret.
+              - op: add
+                path: /data/EMAIL_HOST
+                value: smtp-relay.brevo.com
+              - op: add
+                path: /data/EMAIL_PORT
+                value: "587"
+              - op: add
+                path: /data/EMAIL_HOST_USER
+                value: 8f026a001@smtp-brevo.com
+              - op: add
+                path: /data/EMAIL_FROM
+                value: "Plane <plane@cloudnativedays.fr>"
+              - op: add
+                path: /data/EMAIL_USE_TLS
+                value: "1"
+              - op: add
+                path: /data/EMAIL_USE_SSL
+                value: "0"
+
           # The migrator Job, targeted by a name REGEX because its name carries
           # .Release.Revision (plane-api-migrate-1, -2, ...). Bare `kind: Job`
           # would also match the MinIO bucket-init Job the chart renders when
@@ -179,6 +215,20 @@ spec:
                     memory: 384Mi
                   limits:
                     memory: 768Mi
+              # EMAIL_HOST_PASSWORD is the only EMAIL_* key not carried by the
+              # plane-app-vars ConfigMap above, which this Job already mounts
+              # via envFrom. It has to reach `configure_instance` as env, and it
+              # is a credential, so it comes from brevo-smtp -- the Secret
+              # baserow already consumes in this same namespace (cnd-project),
+              # under the same `email-password` key. No copy, no re-seal.
+              - op: add
+                path: /spec/template/spec/containers/0/env
+                value:
+                  - name: EMAIL_HOST_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: brevo-smtp
+                        key: email-password
 
   values:
     # Same as the 1.6.3 chart default. Restated so a chart bump surfaces an
