@@ -56,6 +56,10 @@ Your recovery key is the *only* thing that gets your history onto a device you d
 laptop, a replacement phone, a browser profile you had to wipe. The server cannot do it for you.
 
 1. If you see **"Set up recovery"** — you have never had a key. Click it.
+   > ⚠️ **This is the trap that catches people.** Seeing "Set up recovery" means you have **no**
+   > recovery key *even if A2 told you your keys are backed up*. Both can be true at once: your keys
+   > are safely on the server, inside a box that nothing on earth can open from a new device. If you
+   > see this button, you are one wiped browser profile away from losing your history.
 2. If you see **"Change recovery key"** — you already have one. **If you cannot find it in your
    password manager right now, click "Change recovery key" and make a new one.** This is safe: it
    re-protects the keys you already have. (It is *not* "Reset cryptographic identity".)
@@ -219,6 +223,24 @@ psql "select v.version, v.deleted, count(k.session_id) as backed_up_keys
 Only the row with `deleted = 0` matters — keys under a deleted version are unreachable forever.
 Compare `backed_up_keys` against the user's room count; a few hundred keys for someone in 20 rooms is
 normal, single digits means key storage was never populated.
+
+**A populated backup is NOT proof that anything can be recovered.** The key that decrypts it lives in
+the user's secret storage (4S), and Element lets a user enable key storage while skipping the recovery
+setup. The result looks healthy from every angle except this one:
+
+```bash
+psql "select account_data_type from account_data
+      where user_id='$USER_ID'
+        and account_data_type in ('m.secret_storage.default_key','m.megolm_backup.v1');"
+```
+
+| Result | Meaning |
+|---|---|
+| both rows present | A recovery key exists. The backup is openable from a new device. |
+| **no rows** | **No recovery key was ever created.** The backup can only be opened by a device that already holds the key locally. If those devices are gone, so is the history — regardless of how many keys `backed_up_keys` reports. |
+
+If this returns nothing, jump straight to B1f Path B and tell the user there is nothing to look for in
+their password manager. Do not send them hunting for a key that was never generated.
 
 ### B1e. Is it really a login problem? (check before assuming)
 
@@ -415,15 +437,19 @@ dev as (
 bk as (
   select v.user_id, (select count(*) from e2e_room_keys k
                      where k.user_id=v.user_id and k.version=v.version) as keys
-  from e2e_room_keys_versions v where v.deleted=0)
+  from e2e_room_keys_versions v where v.deleted=0),
+rec as (   -- users who actually have a recovery key (secret storage configured)
+  select distinct user_id from account_data
+  where account_data_type='m.secret_storage.default_key')
 select split_part(d.user_id,':',1) as "user",
+       bool_or(r.user_id is not null)                                                  as has_recovery,
        count(*) filter (where d.last_seen > (extract(epoch from now())-30*86400)*1000) as live_30d,
        count(*) filter (where d.verified
                           and d.last_seen > (extract(epoch from now())-30*86400)*1000) as live_verified,
        count(*) filter (where d.last_seen is null)                                     as ghosts,
        coalesce(max(bk.keys),0)                                                        as backed_up_keys
-from dev d left join bk on bk.user_id=d.user_id
-group by 1 order by live_verified asc, backed_up_keys desc;
+from dev d left join bk on bk.user_id=d.user_id left join rec r on r.user_id=d.user_id
+group by 1 order by has_recovery asc, live_verified asc, backed_up_keys desc;
 SQL
 ```
 
@@ -431,6 +457,7 @@ Act on it like this:
 
 | Column | Threshold | Action |
 |---|---|---|
+| `has_recovery` | `f` | **Highest priority.** No recovery key exists — losing their browser profile loses their history, with no recourse. Send them Part A, A3. A non-zero `backed_up_keys` does not help them. |
 | `live_verified` | `0` | User is locked out of their own history right now. Open a ticket, run B1. |
 | `live_verified` | `1` | Single point of failure. Nudge them to add a second device (Part A, "two habits"). |
 | `ghosts` | `> 0` | Sessions that never came online, degrading decryption for everyone in shared rooms. Ask the owner to sign them out (A5). |
