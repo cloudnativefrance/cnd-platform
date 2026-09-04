@@ -1,13 +1,35 @@
 ---
-# The ImageRepository cnd-website (see website.yaml) is reused as-is: staging
-# pulls from the same GHCR repository, so a second scan would be wasted work.
-# Only the policy and the write-back automation are specific to staging.
+# Staging scans on its own, on a short interval.
 #
+# This used to reuse the production ImageRepository (cnd-website) on the
+# grounds that a second scan of the same GHCR repository is wasted work. True
+# in isolation, wrong in aggregate: the two environments want opposite things
+# from a scan. Production ships by human promotion, so a 30m scan costs it
+# nothing. Staging is where the organisers watch a Pretalx edit reach the site,
+# and a shared 30m scan turned that into a coffee break.
+#
+# Sharing also meant staging could not be made faster without making
+# production's chain twitchier, since one interval served both.
+#
+# The price of splitting is one extra listing of a single small GHCR repository
+# per minute. That is all.
+apiVersion: image.toolkit.fluxcd.io/v1
+kind: ImageRepository
+metadata:
+  name: cnd-website-staging
+  namespace: flux-system
+spec:
+  image: ghcr.io/cloudnativefrance/website
+  interval: 1m
+  exclusionList:
+    - ^.*\.sig$
+---
 # Tag pattern requires the upstream website CI to publish images as
 # `staging-<short-sha>-<unix-ts>` — Flux ImagePolicy cannot order bare git
-# SHAs. This contract is not yet honoured upstream (no `staging` branch
-# exists there yet), which is why the shipped Deployment carries a sentinel
-# tag rather than a real one.
+# SHAs. The website repo's build-image.yml emits exactly that for pushes to
+# `staging` and for manual workflow_dispatch runs on that branch. The manual
+# run is the lever for picking up Pretalx changes with no code change, since it
+# also disables the Docker layer cache and so refetches the schedule.
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImagePolicy
 metadata:
@@ -15,7 +37,7 @@ metadata:
   namespace: flux-system
 spec:
   imageRepositoryRef:
-    name: cnd-website
+    name: cnd-website-staging
   filterTags:
     pattern: '^staging-[a-f0-9]+-(?P<ts>[0-9]+)$'
     extract: '$ts'
@@ -25,13 +47,23 @@ spec:
 ---
 # A separate automation is mandatory. The production one targets ./website; if
 # it were reused it would rewrite the production manifest with a staging tag.
+#
+# `interval: 1m` because the scan was only half the wait. The staging chain is
+# scan -> policy -> this automation's git commit -> GitRepository sync (1m) ->
+# Kustomization apply (2m). Shortening the scan alone would have moved the
+# bottleneck rather than removed it: two 30m stages put the worst case above an
+# hour, which is why the observed wait was around 30 minutes and never quite
+# reproducible.
+#
+# Pushing straight to main is right HERE and only here — staging exists to be
+# overwritten. Production keeps its promotion branch (see website.yaml).
 apiVersion: image.toolkit.fluxcd.io/v1
 kind: ImageUpdateAutomation
 metadata:
   name: cnd-website-staging
   namespace: flux-system
 spec:
-  interval: 30m
+  interval: 1m
   sourceRef:
     kind: GitRepository
     name: customer
