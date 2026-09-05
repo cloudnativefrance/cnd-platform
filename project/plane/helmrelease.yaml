@@ -36,7 +36,7 @@ spec:
       # 1.6.3 is the newest version PUBLISHED at helm.plane.so. The chart's
       # Chart.yaml on git master says 1.7.0, but that is unreleased — pinning
       # it makes the HelmRelease fail with "chart not found".
-      version: "1.6.3"
+      version: "1.8.0"
   interval: 10m0s
   # Longer than the repo's usual 8m: an install runs the migrator Job to
   # completion before the release reports Ready.
