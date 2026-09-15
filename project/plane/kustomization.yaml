@@ -18,7 +18,7 @@ namespace: cnd-project
 #
 # That is a mitigation, not an encoding. `dependsOn` only takes Kustomization
 # refs, but Flux `healthChecks` do accept `postgresql.cnpg.io/v1 Cluster`, and
-# this repo already relies on that (clusters/k8s-cndfrance-prod/shortener.yaml).
+# this repo already relies on that (clusters/k8s-cndfrance-prod/analytics.yaml).
 # Giving plane its own Flux Kustomization is the real fix; left as a follow-up.
 resources:
   - plane-cnpg-secret.yaml

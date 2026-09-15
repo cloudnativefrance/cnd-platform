@@ -47,9 +47,4 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: cnd-shortener
----
-apiVersion: v1
-kind: Namespace
-metadata:
   name: cnd-analytics
