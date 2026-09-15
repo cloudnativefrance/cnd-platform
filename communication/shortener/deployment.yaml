@@ -33,7 +33,7 @@ spec:
       containers:
         - name: shlink
           # Shlink 4.0+ images already run as a non-root user.
-          image: shlinkio/shlink:5.1.5
+          image: shlinkio/shlink:5.1.6
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
