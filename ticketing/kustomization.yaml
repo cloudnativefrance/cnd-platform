@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Explicit children, like project/kustomization.yaml. Each child sets its own
+# namespace: alfio -> cnd-ticketing, alfio2027 -> cnd-ticketing-2027.
+resources:
+  - alfio
+  - alfio2027
