@@ -2,7 +2,7 @@
 # Plane's instance admin panel (SMTP, auth settings, workspace controls). The
 # chart puts it on the application host at a predictable path with no gate in
 # front of it, so it gets its own Ingress with basic-auth — the same pattern
-# website-staging and the shortener's admin UI use.
+# website-staging uses.
 #
 # No cert-manager annotation here: ingress.yaml owns plane-tls for this host,
 # and a second cluster-issuer annotation would race it for the same Secret.

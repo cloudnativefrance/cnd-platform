@@ -87,7 +87,10 @@ spec:
 
   resources:
     requests:
-      memory: "768Mi"
+      # Below the limit, unlike ticketing/alfio: worker memory requests sit at
+      # ~98% of allocatable while real usage is ~45%, and a 768Mi request did
+      # not fit on any node. The instance uses ~100-180Mi.
+      memory: "256Mi"
       cpu: 200m
     limits:
       memory: "768Mi"

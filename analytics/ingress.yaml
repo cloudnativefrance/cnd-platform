@@ -1,6 +1,6 @@
 ---
-# No basic-auth annotations here, unlike website-staging and the shortener's
-# admin UI: Umami ships its own user accounts. The tracker script and the
+# No basic-auth annotations here, unlike website-staging: Umami ships its own
+# user accounts. The tracker script and the
 # collection endpoint must also stay publicly reachable for the website to
 # report at all.
 apiVersion: networking.k8s.io/v1
