@@ -1,0 +1,93 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: cnpg-alfio
+spec:
+  description: "PostgreSQL cluster for the application Alf.io (2027 edition)"
+  instances: 2
+
+  # Seeded from a copy of the cnd-ticketing alfio backups (originally in
+  # gs://cloudnativedaysfr/cnpg/alfio), mirrored to the same path on Scaleway
+  # on 2026-09-15 after a WAL switch (last archived segment ...0199...84).
+  # The copy is a point-in-time snapshot: the cnd-ticketing instance keeps
+  # archiving to GCS and the two databases diverge from the copy onward.
+  bootstrap:
+    recovery:
+      source: alfio-seed
+      # Pinned to the latest base backup in the seed (2026-09-15 00:00 UTC),
+      # then WAL is replayed to the end of the copied archive.
+      recoveryTarget:
+        backupID: "20260915T000001"
+      database: alfio
+      owner: alfio
+      secret:
+        name: alfio-cnpg-secret
+
+  externalClusters:
+    - name: alfio-seed
+      barmanObjectStore:
+        destinationPath: "s3://cloudnativedaysfr/cnpg/alfio"
+        serverName: cnpg-alfio
+        endpointURL: "https://s3.fr-par.scw.cloud"
+        s3Credentials:
+          accessKeyId:
+            name: cnd-france-scw-secret
+            key: access-key-id
+          secretAccessKey:
+            name: cnd-france-scw-secret
+            key: secret-access-key
+          region:
+            name: cnd-france-scw-secret
+            key: region
+        wal:
+          compression: gzip
+
+  superuserSecret:
+    name: alfio-cnpg-secret
+
+  storage:
+    storageClass: node-local-retain
+    size: 10Gi
+
+  backup:
+    barmanObjectStore:
+      # Must differ from the seed path: barman refuses to archive into a
+      # non-empty WAL archive.
+      destinationPath: "s3://cloudnativedaysfr/cnpg/alfio-2027"
+      endpointURL: "https://s3.fr-par.scw.cloud"
+      s3Credentials:
+        accessKeyId:
+          name: cnd-france-scw-secret
+          key: access-key-id
+        secretAccessKey:
+          name: cnd-france-scw-secret
+          key: secret-access-key
+        region:
+          name: cnd-france-scw-secret
+          key: region
+      wal:
+        compression: gzip
+      data:
+        compression: gzip
+    retentionPolicy: "90d"
+
+  monitoring:
+    customQueriesConfigMap:
+      - key: queries
+        name: cnpg-default-monitoring
+    disableDefaultQueries: false
+    enablePodMonitor: true
+    podMonitorMetricRelabelings:
+      - action: replace
+        sourceLabels:
+          - cluster
+        targetLabel: cnpg_cluster
+      - action: labeldrop
+        regex: cluster
+
+  resources:
+    requests:
+      memory: "768Mi"
+      cpu: 200m
+    limits:
+      memory: "768Mi"
