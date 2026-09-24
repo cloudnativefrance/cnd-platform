@@ -36,7 +36,7 @@ spec:
               value: "-XX:+UnlockExperimentalVMOptions -XX:+UseCGroupMemoryLimitForHeap -XX:+UseConcMarkSweepGC -Xmx256m -Xms256m"
             # - name: ALFIO_JAVA_OPTS
             #  value: "-Dlogging.level.alfio=TRACE"
-          image: "alfio/alf.io:2.0-M5-2606"
+          image: "jcsirot/alf.io-cloudnativedaysfr:2.0-cnd.2609231516"
           imagePullPolicy: IfNotPresent
           name: alfio
           ports:
