@@ -26,7 +26,7 @@ data:
     time_zone = Europe/Paris
 
     [mail]
-    from = admin@cloudnativefr.org
+    from = orga-cfp@cloudnativedays.fr
     host = smtp-relay.brevo.com
     port = 587
     tls = True
