@@ -1,7 +1,6 @@
 name: pretalx plugin
 
-# Runs the cndfr_speaker_gate tests against the pretalx release pinned in
-# statefulset.yaml, so a Renovate bump of the image tag is tested before merge.
+# See callforpapers/pretalx/plugins/README.md.
 on:
   pull_request:
     paths: ["callforpapers/pretalx/**", ".github/workflows/pretalx-plugin.yaml"]

@@ -1,18 +1,10 @@
-"""Make required profile fields binding for every speaker, co-speakers included.
-
-pretalx only checks required speaker fields when someone saves the form that
-holds them. A co-speaker who accepts an invitation never goes through the CfP
-wizard, so nothing forces them to fill those fields in. This plugin:
-
-- refuses to confirm a proposal while one of its speakers has gaps, naming them;
-- shows each speaker what is missing on the pages they land on.
-"""
+"""Make required profile fields binding for co-speakers too (see ../README.md)."""
 
 from django.dispatch import receiver
 from django.utils.html import format_html
 from pretalx.cfp.signals import html_above_profile_page, html_above_submission_list
 from pretalx.common.exceptions import SubmissionError
-from pretalx.person.models import SpeakerProfile
+from pretalx.submission.domain.queries.question import active_questions
 from pretalx.submission.models import (
     Answer,
     QuestionTarget,
@@ -23,29 +15,24 @@ from pretalx.submission.signals import before_submission_state_change
 
 
 def _is_filled(answer):
-    # A required checkbox (e.g. a consent) only counts once it is ticked,
-    # mirroring the CfP form, where a required BooleanField must be True.
+    # Not Answer.is_answered: it counts whitespace and an unticked checkbox ("No")
+    # as answered, while the CfP form requires a required checkbox to be ticked.
     if answer.question.variant == QuestionVariant.BOOLEAN:
         return answer.boolean_answer is True
     return bool((answer.answer_string or "").strip())
 
 
-def missing_fields(speaker):
+def missing_fields(speaker, event):
     """Labels of the required profile fields ``speaker`` has not filled in."""
-    event = speaker.event
     missing = []
     if event.cfp.require_biography and not (speaker.biography or "").strip():
         missing.append("Biographie")
-    if event.cfp.require_avatar and not (
-        speaker.profile_picture_id and speaker.profile_picture.avatar
-    ):
+    if event.cfp.require_avatar and not speaker.avatar:
         missing.append("Photo")
 
     questions = [
         question
-        for question in event.questions.filter(target=QuestionTarget.SPEAKER, active=True).order_by(
-            "position"
-        )
+        for question in active_questions(event, target=QuestionTarget.SPEAKER)
         if question.required
     ]
     filled = {
@@ -67,7 +54,7 @@ def refuse_incomplete_confirmation(sender, submission, new_state, **kwargs):
     incomplete = [
         f"{speaker.name} ({', '.join(missing)})"
         for speaker in submission.speakers.all()
-        if (missing := missing_fields(speaker))
+        if (missing := missing_fields(speaker, sender))
     ]
     if incomplete:
         raise SubmissionError(
@@ -83,11 +70,10 @@ def refuse_incomplete_confirmation(sender, submission, new_state, **kwargs):
 def missing_fields_banner(sender, request, **kwargs):
     if not request.user.is_authenticated:
         return ""
-    # A plain lookup: User.get_speaker() would create a profile for a stranger.
-    speaker = SpeakerProfile.objects.filter(user=request.user, event=sender).first()
+    speaker = request.user.get_speaker(sender, create=False)
     if not speaker or not speaker.submissions.exists():
         return ""
-    missing = missing_fields(speaker)
+    missing = missing_fields(speaker, sender)
     if not missing:
         return ""
     return format_html(

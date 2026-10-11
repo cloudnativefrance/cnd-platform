@@ -12,7 +12,6 @@ class PluginApp(AppConfig):
             "Refuse la confirmation d'une proposition tant qu'un de ses intervenants "
             "n'a pas rempli les champs obligatoires de son profil, et le lui signale."
         )
-        visible = True
         version = "1.0.0"
         category = "FEATURE"
 

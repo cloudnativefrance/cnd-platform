@@ -268,9 +268,9 @@ spec:
               - key: signals.py
                 path: cndfr_speaker_gate/signals.py
               - key: METADATA
-                path: cndfr_speaker_gate-1.0.0.dist-info/METADATA
+                path: cndfr_speaker_gate.dist-info/METADATA
               - key: entry_points.txt
-                path: cndfr_speaker_gate-1.0.0.dist-info/entry_points.txt
+                path: cndfr_speaker_gate.dist-info/entry_points.txt
       securityContext:
         fsGroup: 999
         runAsUser: 999

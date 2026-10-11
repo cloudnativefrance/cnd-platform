@@ -1,7 +1,6 @@
 import pytest
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.test import RequestFactory
 from django_scopes import scope, scopes_disabled
 from pretalx.cfp.signals import html_above_profile_page, html_above_submission_list
 from pretalx.common.exceptions import SubmissionError
@@ -15,6 +14,7 @@ from tests.factories import (
     SubmissionFactory,
     UserFactory,
 )
+from tests.utils import make_request
 
 pytestmark = pytest.mark.django_db
 
@@ -51,16 +51,11 @@ def answer(question, speaker, value="ACME"):
     return AnswerFactory(question=question, speaker=speaker, submission=None, answer=value)
 
 
-def accepted_talk(event, *speakers, state=SubmissionStates.ACCEPTED):
+def proposal(event, *speakers, state=SubmissionStates.ACCEPTED):
     talk = SubmissionFactory(event=event, state=state)
     with scopes_disabled():
         talk.speakers.add(*speakers)
     return talk
-
-
-def first_speaker(talk):
-    with scopes_disabled():
-        return talk.speakers.first()
 
 
 def confirm(talk, speaker):
@@ -71,9 +66,7 @@ def confirm(talk, speaker):
 
 
 def banner(signal, event, user):
-    request = RequestFactory().get("/")
-    request.user = user
-    request.event = event
+    request = make_request(event, user)
     with scope(event=event):
         return "".join(str(html) for _, html in signal.send(event, request=request))
 
@@ -82,33 +75,22 @@ def test_confirm_is_refused_while_a_cospeaker_misses_a_required_field(event, com
     alice = make_speaker(event, name="Alice")
     bob = make_speaker(event, name="Bob")
     answer(company, alice)
-    talk = accepted_talk(event, alice, bob)
+    talk = proposal(event, alice, bob)
 
-    with pytest.raises(SubmissionError, match=r"Bob.*Entreprise"):
-        confirm(talk, alice)
-
-    with scopes_disabled():
-        talk.refresh_from_db()
-    assert talk.state == SubmissionStates.ACCEPTED
-
-
-def test_refusal_does_not_name_speakers_whose_profile_is_complete(event, company):
-    alice = make_speaker(event, name="Alice")
-    bob = make_speaker(event, name="Bob")
-    answer(company, alice)
-    talk = accepted_talk(event, alice, bob)
-
-    with pytest.raises(SubmissionError) as refusal:
+    with pytest.raises(SubmissionError, match=r"Bob.*Entreprise") as refusal:
         confirm(talk, alice)
 
     assert "Alice" not in str(refusal.value)
+    with scopes_disabled():
+        talk.refresh_from_db()
+    assert talk.state == SubmissionStates.ACCEPTED
 
 
 def test_confirm_goes_through_once_every_speaker_answered(event, company):
     alice, bob = make_speaker(event), make_speaker(event)
     answer(company, alice)
     answer(company, bob)
-    talk = accepted_talk(event, alice, bob)
+    talk = proposal(event, alice, bob)
 
     assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
@@ -116,7 +98,7 @@ def test_confirm_goes_through_once_every_speaker_answered(event, company):
 def test_blank_answer_counts_as_missing(event, company):
     alice = make_speaker(event, name="Alice")
     answer(company, alice, value="   ")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     with pytest.raises(SubmissionError, match="Entreprise"):
         confirm(talk, alice)
@@ -132,7 +114,7 @@ def test_unticked_required_consent_counts_as_missing(event):
     )
     alice = make_speaker(event, name="Alice")
     answer(consent, alice, value="False")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     with pytest.raises(SubmissionError, match="Code de conduite"):
         confirm(talk, alice)
@@ -144,38 +126,41 @@ def test_ticked_required_consent_is_accepted(event):
     )
     alice = make_speaker(event)
     answer(consent, alice, value="True")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
 
 def test_optional_speaker_field_does_not_block(event):
     QuestionFactory(event=event, target=QuestionTarget.SPEAKER, question_required="optional")
-    talk = accepted_talk(event, make_speaker(event))
+    alice = make_speaker(event)
+    talk = proposal(event, alice)
 
-    assert confirm(talk, first_speaker(talk)) == SubmissionStates.CONFIRMED
+    assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
 
 def test_inactive_speaker_field_does_not_block(event, company):
     company.active = False
     with scopes_disabled():
         company.save()
-    talk = accepted_talk(event, make_speaker(event))
+    alice = make_speaker(event)
+    talk = proposal(event, alice)
 
-    assert confirm(talk, first_speaker(talk)) == SubmissionStates.CONFIRMED
+    assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
 
 def test_required_proposal_field_does_not_block(event):
     QuestionFactory(event=event, target=QuestionTarget.SUBMISSION, question_required="required")
-    talk = accepted_talk(event, make_speaker(event))
+    alice = make_speaker(event)
+    talk = proposal(event, alice)
 
-    assert confirm(talk, first_speaker(talk)) == SubmissionStates.CONFIRMED
+    assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
 
 def test_missing_required_biography_blocks():
     event = EventFactory(plugins=PLUGIN, cfp__fields={"biography": {"visibility": "required"}})
     alice = make_speaker(event, name="Alice", biography="")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     with pytest.raises(SubmissionError, match=r"Alice.*[Bb]iograph"):
         confirm(talk, alice)
@@ -184,7 +169,7 @@ def test_missing_required_biography_blocks():
 def test_missing_optional_biography_does_not_block():
     event = EventFactory(plugins=PLUGIN, cfp__fields={"biography": {"visibility": "optional"}})
     alice = make_speaker(event, biography="")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
@@ -192,14 +177,14 @@ def test_missing_optional_biography_does_not_block():
 def test_missing_required_avatar_blocks():
     event = EventFactory(plugins=PLUGIN, cfp__fields={"avatar": {"visibility": "required"}})
     alice = make_speaker(event, name="Alice")
-    talk = accepted_talk(event, alice)
+    talk = proposal(event, alice)
 
     with pytest.raises(SubmissionError, match=r"Alice.*[Pp]hoto"):
         confirm(talk, alice)
 
 
 def test_accepting_a_proposal_is_not_blocked(event, company):
-    talk = accepted_talk(event, make_speaker(event), state=SubmissionStates.SUBMITTED)
+    talk = proposal(event, make_speaker(event), state=SubmissionStates.SUBMITTED)
 
     with scope(event=event):
         talk.accept()
@@ -208,18 +193,19 @@ def test_accepting_a_proposal_is_not_blocked(event, company):
     assert talk.state == SubmissionStates.ACCEPTED
 
 
-def test_event_without_the_plugin_is_not_blocked(company):
+def test_event_without_the_plugin_is_not_blocked():
     other = EventFactory()
     QuestionFactory(event=other, target=QuestionTarget.SPEAKER, question_required="required")
-    talk = accepted_talk(other, make_speaker(other))
+    alice = make_speaker(other)
+    talk = proposal(other, alice)
 
-    assert confirm(talk, first_speaker(talk)) == SubmissionStates.CONFIRMED
+    assert confirm(talk, alice) == SubmissionStates.CONFIRMED
 
 
 @pytest.mark.parametrize("signal", BANNERS)
 def test_banner_lists_missing_fields_and_links_to_profile(signal, event, company):
     alice = make_speaker(event)
-    accepted_talk(event, alice, state=SubmissionStates.SUBMITTED)
+    proposal(event, alice)
 
     html = banner(signal, event, alice.user)
 
@@ -231,7 +217,7 @@ def test_banner_lists_missing_fields_and_links_to_profile(signal, event, company
 def test_banner_is_empty_once_profile_is_complete(signal, event, company):
     alice = make_speaker(event)
     answer(company, alice)
-    accepted_talk(event, alice, state=SubmissionStates.SUBMITTED)
+    proposal(event, alice)
 
     assert banner(signal, event, alice.user) == ""
 
@@ -245,7 +231,7 @@ def test_banner_escapes_field_labels(signal, event):
         question_required="required",
     )
     alice = make_speaker(event)
-    accepted_talk(event, alice, state=SubmissionStates.SUBMITTED)
+    proposal(event, alice)
 
     html = banner(signal, event, alice.user)
 
@@ -267,7 +253,7 @@ def test_speaker_is_told_why_confirmation_is_refused(client, event, company):
     alice = make_speaker(event, name="Alice")
     bob = make_speaker(event, name="Bob")
     answer(company, alice)
-    talk = accepted_talk(event, alice, bob)
+    talk = proposal(event, alice, bob)
     client.force_login(alice.user)
 
     response = client.post(talk.urls.confirm, follow=True)
@@ -281,7 +267,7 @@ def test_speaker_is_told_why_confirmation_is_refused(client, event, company):
 @pytest.mark.parametrize("page", ["user_submissions", "user"])
 def test_speaker_pages_show_the_banner(client, event, company, page):
     bob = make_speaker(event)
-    accepted_talk(event, bob, state=SubmissionStates.SUBMITTED)
+    proposal(event, bob)
     client.force_login(bob.user)
 
     html = client.get(getattr(event.urls, page)).content.decode()

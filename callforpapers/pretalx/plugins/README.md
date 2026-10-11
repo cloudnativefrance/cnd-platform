@@ -22,14 +22,13 @@ A required checkbox (e.g. a consent) only counts once it is ticked.
 There is no custom image. `kustomization.yaml` turns the plugin files into the
 `pretalx-plugins` ConfigMap; `statefulset.yaml` mounts it on `/plugins` and sets
 `PYTHONPATH=/plugins`. pretalx finds the plugin through the `pretalx.plugin`
-entry point in `cndfr_speaker_gate-1.0.0.dist-info/`.
+entry point in `cndfr_speaker_gate.dist-info/`.
 
 A deployed plugin does nothing until an organiser enables it for an event under
 **Settings → Plugins**.
 
 Adding a file to the plugin means listing it in both the `configMapGenerator`
-and the volume `items`. Changing the version means renaming the `.dist-info`
-directory in both places too.
+and the volume `items` (ConfigMap keys cannot contain `/`).
 
 ### Tests
 
