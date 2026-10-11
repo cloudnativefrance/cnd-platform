@@ -1,0 +1,24 @@
+name: pretalx plugin
+
+# Runs the cndfr_speaker_gate tests against the pretalx release pinned in
+# statefulset.yaml, so a Renovate bump of the image tag is tested before merge.
+on:
+  pull_request:
+    paths: ["callforpapers/pretalx/**", ".github/workflows/pretalx-plugin.yaml"]
+  push:
+    branches: ["main"]
+    paths: ["callforpapers/pretalx/**", ".github/workflows/pretalx-plugin.yaml"]
+
+jobs:
+  tests:
+    name: pretalx plugin tests 🐍
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Run plugin tests
+        run: ./callforpapers/pretalx/plugins/run-tests.sh -q

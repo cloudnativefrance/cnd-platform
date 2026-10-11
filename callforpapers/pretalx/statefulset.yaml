@@ -32,12 +32,17 @@ spec:
               value: "no"
             - name: AUTOREBUILD
               value: "no"
+            - name: PYTHONPATH
+              value: /plugins
           volumeMounts:
             - name: pretalx-public
               mountPath: /public
             - name: pretalx-config
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
+            - name: pretalx-plugins
+              mountPath: /plugins
+              readOnly: true
           resources:
             requests:
               memory: 256Mi
@@ -54,6 +59,8 @@ spec:
               value: /public/media
             - name: PRETALX_FILESYSTEM_STATIC
               value: /public/static
+            - name: PYTHONPATH
+              value: /plugins
             - name: GUNICORN_BIND_ADDR
               value: 0.0.0.0:8080
             - name: PRETALX_DB_USER
@@ -125,6 +132,9 @@ spec:
             - name: pretalx-config
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
+            - name: pretalx-plugins
+              mountPath: /plugins
+              readOnly: true
           resources:
             requests:
               memory: 4Gi
@@ -146,6 +156,8 @@ spec:
               value: /public/media
             - name: PRETALX_FILESYSTEM_STATIC
               value: /public/static
+            - name: PYTHONPATH
+              value: /plugins
             - name: PRETALX_DB_USER
               valueFrom:
                 secretKeyRef:
@@ -184,6 +196,9 @@ spec:
             - name: pretalx-config
               mountPath: /etc/pretalx/pretalx.cfg
               subPath: pretalx.cfg
+            - name: pretalx-plugins
+              mountPath: /plugins
+              readOnly: true
         - name: nginx-statics
           image: nginx:1.31-alpine
           imagePullPolicy: IfNotPresent
@@ -241,6 +256,21 @@ spec:
             name: pretalx-config
         - name: nginx-tmp
           emptyDir: {}
+        - name: pretalx-plugins
+          configMap:
+            defaultMode: 420
+            name: pretalx-plugins
+            items:
+              - key: __init__.py
+                path: cndfr_speaker_gate/__init__.py
+              - key: apps.py
+                path: cndfr_speaker_gate/apps.py
+              - key: signals.py
+                path: cndfr_speaker_gate/signals.py
+              - key: METADATA
+                path: cndfr_speaker_gate-1.0.0.dist-info/METADATA
+              - key: entry_points.txt
+                path: cndfr_speaker_gate-1.0.0.dist-info/entry_points.txt
       securityContext:
         fsGroup: 999
         runAsUser: 999

@@ -1,2 +1,5 @@
 # Rendered manifest bundle produced by scripts/validate-manifests.sh
 .bundle/
+
+# Bytecode left by callforpapers/pretalx/plugins/run-tests.sh
+__pycache__/

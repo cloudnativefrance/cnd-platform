@@ -15,3 +15,16 @@ resources:
   - service.yaml
   - statefulset.yaml
   - valkey-secret.yaml
+
+# The cndfr_speaker_gate pretalx plugin (see plugins/), shipped without a custom
+# image: statefulset.yaml mounts it on /plugins and sets PYTHONPATH, so pretalx
+# finds it through the entry point in its .dist-info. The name hash rolls the
+# pod whenever the plugin changes.
+configMapGenerator:
+  - name: pretalx-plugins
+    files:
+      - plugins/cndfr_speaker_gate/__init__.py
+      - plugins/cndfr_speaker_gate/apps.py
+      - plugins/cndfr_speaker_gate/signals.py
+      - plugins/cndfr_speaker_gate-1.0.0.dist-info/METADATA
+      - plugins/cndfr_speaker_gate-1.0.0.dist-info/entry_points.txt
