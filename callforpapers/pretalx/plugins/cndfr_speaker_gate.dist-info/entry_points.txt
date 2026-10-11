@@ -1,0 +1,2 @@
+[pretalx.plugin]
+cndfr_speaker_gate = cndfr_speaker_gate:PretalxPluginMeta

@@ -15,3 +15,14 @@ resources:
   - service.yaml
   - statefulset.yaml
   - valkey-secret.yaml
+
+# pretalx plugin mounted on /plugins by statefulset.yaml (see plugins/README.md).
+# The name hash rolls the pod whenever the plugin changes.
+configMapGenerator:
+  - name: pretalx-plugins
+    files:
+      - plugins/cndfr_speaker_gate/__init__.py
+      - plugins/cndfr_speaker_gate/apps.py
+      - plugins/cndfr_speaker_gate/signals.py
+      - plugins/cndfr_speaker_gate.dist-info/METADATA
+      - plugins/cndfr_speaker_gate.dist-info/entry_points.txt
