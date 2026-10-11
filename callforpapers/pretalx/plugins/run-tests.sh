@@ -10,8 +10,11 @@ src=${PRETALX_SRC:-${XDG_CACHE_HOME:-$HOME/.cache}/pretalx-src-$version}
 if [ ! -d "$src" ]; then
   git clone -q --depth 1 --branch "$version" https://github.com/pretalx/pretalx.git "$src"
 fi
+# The Python of the pretalx/standalone image: a newer one may lack wheels
+# (CPython 3.15 broke minify-html's PyO3 build).
+python=3.14
 if [ ! -x "$src/.venv/bin/pytest" ]; then
-  (cd "$src" && uv venv -q --python '>=3.13' && uv pip install -q -e ".[dev]")
+  (cd "$src" && uv venv -q --python "$python" && uv pip install -q -e ".[dev]")
 fi
 
 cd "$here"
