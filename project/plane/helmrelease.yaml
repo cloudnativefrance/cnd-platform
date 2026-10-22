@@ -269,7 +269,7 @@ spec:
     redis:
       local_setup: true
       # Chart default, restated for the same reason as planeVersion.
-      image: valkey/valkey:7.2.11-alpine
+      image: valkey/valkey:9.1.2-alpine
       storageClass: node-local-retain
       volumeSize: 1Gi
       assign_cluster_ip: true
