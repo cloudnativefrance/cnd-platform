@@ -168,6 +168,11 @@ spec:
                 secretKeyRef:
                   name: pretalx-cnpg-secret
                   key: password
+            - name: PRETALX_REDIS
+              valueFrom:
+                secretKeyRef:
+                  name: pretalx-valkey
+                  key: redis-url
             - name: PRETALX_CELERY_BROKER
               valueFrom:
                 secretKeyRef:
