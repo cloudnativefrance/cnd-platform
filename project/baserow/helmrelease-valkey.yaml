@@ -16,7 +16,7 @@ spec:
         kind: HelmRepository
         name: valkey
         namespace: flux-system
-      version: "0.10.0"
+      version: "1.0.0"
   interval: 10m0s
   install:
     remediation:
